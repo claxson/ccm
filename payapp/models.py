@@ -568,7 +568,7 @@ class PaymentHistory(models.Model):
 class Package(models.Model):
     package_id = models.CharField(max_length=10)
     duration   = models.IntegerField()
-    amount     = models.IntegerField()
+    amount     = models.FloatField()
     integrator = models.ForeignKey(Integrator)
 
     @classmethod
