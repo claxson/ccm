@@ -27,12 +27,6 @@ class Intercom(object):
         try:
             response, content = self.doPost(user)
             self.endpoint = temp_ep
-            print "########################## Create User Post"
-            print user
-            print "########################## Create User Response"
-            print response
-            print "########################## Create User content"
-            print content
             if response['status'] == '202':
                 return True
             else:
@@ -52,12 +46,6 @@ class Intercom(object):
 
         try:
             response, content = self.doPost(event)
-            print "########################## Submit Event Post"
-            print event
-            print "########################## Submit Event Response"
-            print response
-            print "########################## Submit Event content"
-            print content
             if response['status'] == '202':
                 return True
             else:

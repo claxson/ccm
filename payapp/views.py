@@ -215,20 +215,24 @@ def create_payment(request):
         payday = __payday_calc(data['payment_date'])
         if 'discount' in data and 'disc_counter' in data:
             up = UserPayment.create(user, 
-                                    data['amount'], 
-                                    currency, 
-                                    data['payment_date'], 
-                                    payday, 
                                     data['recurrence'],
-                                    data['discount'],
-                                    data['disc_counter'])
-        else:
-            up = UserPayment.create(user, 
-                                    data['amount'], 
-                                    currency, 
+                                    data['amount'],
+                                    currency,
                                     data['payment_date'],
-                                    payday, 
-                                    data['recurrence'])
+                                    payday,
+                                    data['discount'],
+                                    data['disc_counter'],
+                                    True)
+        else:
+            up = UserPayment.create(user,
+                                    data['recurrence'],
+                                    data['amount'],
+                                    currency,
+                                    data['payment_date'],
+                                    payday,
+                                    0,
+                                    0,
+                                    True)
     except Exception as e:
         user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
         message = "could not create user payment: (%s)" % str(e)
@@ -261,7 +265,7 @@ def create_payment(request):
             payment_id = "PH_%s_%d" % (user.user_id, int(time()))
 
             # Creo el registro en PaymentHistory
-            ph = PaymentHistory.create(up, card, payment_id, integrator, disc_pct)
+            ph = PaymentHistory.create(up, payment_id, integrator, card, disc_pct)
 
             if ph.amount > 0:
                 try:
@@ -365,32 +369,54 @@ def create_payment(request):
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # JSON - Mandatorios: user_id, discount, disc_counter                                                        #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++    
-@require_http_methods(["POST"])
+@require_http_methods(["GET", "POST"])
 def payment_discount(request):
    # Verifico ApiKey
     cap = __check_apikey(request)
     if cap['status'] == 'error':
         return HttpResponse(status=http_UNAUTHORIZED)
-        
-    # Cargo el json
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        message = "error decoding json"
-        body = {'status': 'error', 'message': message}
-        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
-    # Verifico las key mandatorios del json    
-    keys = ['user_id', 'discount', 'disc_counter']
-    json_loader =  __validate_json(data, keys)
-    if json_loader['status'] == 'error':
-        return HttpResponse(json.dumps(json_loader), content_type="application/json", status=http_BAD_REQUEST)
+    if request.method == 'POST':
+        # Cargo el json
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            message = "error decoding json"
+            body = {'status': 'error', 'message': message}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+    
+        # Verifico las key mandatorios del json    
+        keys = ['user_id', 'discount', 'disc_counter']
+        json_loader =  __validate_json(data, keys)
+        if json_loader['status'] == 'error':
+            return HttpResponse(json.dumps(json_loader), content_type="application/json", status=http_BAD_REQUEST)
+        
+        user_id  = data['user_id']
+        discount = data['discount']
+        disc_counter = data['disc_counter']
+        status = http_POST_OK
+        
+    else:
+        try: 
+            user_id = request.GET['user_id']
+            discount = int(request.GET['discount'])
+            disc_counter = int(request.GET['disc_counter'])
+            status = http_REQUEST_OK
+        except:
+            message = "missing parameter"
+            body = {'status': 'error', 'message': message}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)        
+        
+        if discount < 1 or discount > 100 or disc_counter < 1:
+            message = "invalid parameter value"
+            body = {'status': 'error', 'message': message}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
         
     # Verifico que el usuario exista
     try:
-        user = User.objects.get(user_id=data['user_id'])
+        user = User.objects.get(user_id=user_id)
     except ObjectDoesNotExist:
-        message = "user_id %s does not exist" % data['user_id']
+        message = "user_id %s does not exist" % user_id
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
@@ -398,25 +424,27 @@ def payment_discount(request):
     try:
         up = UserPayment.objects.get(user=user, enabled=True)
     except ObjectDoesNotExist:
-        message = "user_id %s has not enabled recurring payment" % data['user_id']
+        message = "user_id %s has not enabled recurring payment" % user_id
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
 
+    """    
     # Devuelvo error si existe algun descuento activo
     if up.disc_counter > 0:
         message = "discount already active"
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
-
+    """
+    
     # Aplico el descuento
     try:
-        up.discount(data['discount'], data['disc_counter'])
+        up.discount(discount, disc_counter)
     except:
         message = "could not apply discount"
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
     
-    return HttpResponse(status=http_POST_OK)
+    return HttpResponse(status=status)
         
         
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -521,7 +549,7 @@ def change_token_card(request):
         
     # Verifico que el integrador exista
     try:
-        integrator = Integrator.objects.get(name=data['integrator'])
+        integrator = Integrator.objects.get(name=data['integrator'], country=user.country)
     except ObjectDoesNotExist:
         message = "integrator %s does not exist" % data['integrator']
         body = {'status': 'error', 'message': message}

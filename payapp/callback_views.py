@@ -6,6 +6,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import *
+from django.utils import timezone
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # App Models
@@ -33,6 +34,10 @@ from misc import paymentez_translator
 from misc import paymentez_intercom_metadata
 
 from intercom import Intercom
+
+import logging
+import urllib
+import xmltodict
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
@@ -171,3 +176,67 @@ def callback_paymentez(request):
         print "CALLBACK_CLIENT: %s" % str(data)
         body = {"status": "error", "message": "ignoring callback: app_code"}
         return HttpResponse(json.dumps(body), content_type="application/json", status=200)
+
+# CommerceGate Callback
+@require_http_methods(["GET", "POST"])
+def callback_commercegate(request):
+    integrator = Integrator.get('commerce_gate')    
+
+    try:
+        data            = request.body
+        request_unquote = urllib.unquote_plus(data)
+        xml             = xmltodict.parse(request_unquote[22:])
+    except Exception:
+        return HttpResponse('Error parsing callback data', content_type='text/plain', status='200')
+
+    xml_data = xml['cgCallback']
+    transaction_type = xml_data['TransactionType']
+    transaction_id = xml_data['TransactionID']
+    user_id = xml_data['UserID']
+    user = User.objects.get(user_id=user_id)
+
+    if transaction_type == 'SALE':
+        up = UserPayment.objects.get(user=user, status='PE')
+        ph = PaymentHistory.objects.get(user_payment__user_payment_id=up.user_payment_id, status='P')
+
+        # Activar user payment
+        up.active()
+        up.user_payment = up.calc_payment_date(datetime.now())
+        up.save()
+
+        # Aprobar payment history
+        ph.approve(transaction_id)
+
+        # Setear fecha de expiracion del usuario
+        user.set_expiration(up.calc_payment_date(timezone.now()))
+
+        print 'CommerceGate callback: Sale'
+    elif transaction_type == 'REBILL':
+        up = UserPayment.objects.get(user=user, status='AC')
+        payment_id = 'PH_%s_%d' % (user.user_id, int(time()))
+
+        # Modificar fecha de user payment
+        up.user_payment = up.calc_payment_date()
+        up.save()
+
+        # Modificar fecha de expiracion del usuario
+        user.add_to_expiration(up.recurrence)
+
+        # Crear payment history
+	PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
+
+        print 'CommerceGate callback: Rebill'
+    elif transaction_type == 'CANCELMEMBERSHIPNOTIFY':
+        up = UserPayment.objects.get(user=user, status='AC')
+	up.cancel('U')
+
+        print 'CommerceGate callback: Cancel membership notify'
+    elif transaction_type == 'CANCELMEMBERSHIP':
+        user.expire()
+
+        print 'CommerceGate callback: Cancel membership'
+
+    print xml
+
+    # Test
+    return HttpResponse('SUCCESS', content_type='text/plain', status='200')

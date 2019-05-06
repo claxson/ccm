@@ -83,7 +83,7 @@ def get_card(user):
 def paymentez_callback_checker(integrator):
     timeout = IntegratorSetting.get_var(integrator, 'callback_timeout')
     phs = PaymentHistory.objects.filter(status='W')
-    logging.info("paymentez_callback_checker(): Checking callbacks expiration...")
+    logging.info("paymentez_callback_checker(): Checking callbacks expiration for %s %s..." % (integrator.name, integrator.country.name))
     for ph in phs:
         logging.info("paymentez_callback_checker(): PaymentHistory %s expired. New status... Error" % ph.payment_id)
         t = ph.modification_date + timezone.timedelta(seconds=int(timeout))
@@ -132,7 +132,7 @@ def payd_main():
     while True:
         # Obtengo todos los UserPayments activos y habilitados con payment_date vencido.
         logging.info("payd_main(): Getting active UserPayemnts to pay...")
-        payments = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lte=timezone.now())
+        payments = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lte=timezone.now(), internal=True)
         ips = Setting.get_var("payment_slot")
         for up in payments:
             if ips > 0:
@@ -151,8 +151,10 @@ def payd_main():
                 make_payment(up, card, logging)
                 ips = ips - 1
             else:
-                logging.info("payd_main(): Payment slot limit reached. Next execution in %s seconds"
-                             % str(settings['sleep_time_daemon']))
+                pp = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lte=timezone.now(), internal=True).count()
+                logging.info("payd_main(): Payment slot limit reached. Next execution in %s seconds. Pending payments: %d"
+                             % (str(settings['sleep_time_daemon']), pp))
+                break
 
         # Verifico el estado de los callbacks para paymentez
         integrators = Integrator.objects.filter(name="paymentez")

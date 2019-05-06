@@ -242,7 +242,7 @@ def get_all_users(request):
         has_recurrence = user.has_recurrence()
 
         ret = {}
-        ret['card']                 = card.number
+        ret['card']                 = ''
         ret['country']              = user.country.name
         ret['creation_date']        = user.creation_date
         ret['email']                = user.email
@@ -251,6 +251,9 @@ def get_all_users(request):
         ret['modification_date']    = user.modification_date
         ret['user_id']              = user.user_id
         ret['has_recurrence']       = has_recurrence
+
+        if card:
+            ret['card'] = card.number
 
         data.append(ret)
 

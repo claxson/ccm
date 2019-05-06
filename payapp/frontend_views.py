@@ -63,3 +63,11 @@ def users(request):
 
     context = { 'title': 'Usuarios' }
     return render(request, 'content/content.html', context)
+
+# /commercegate
+@require_http_methods(["GET", "POST"])
+def commercegate(request):
+    username = request.GET.get('username')
+    email = request.GET.get('email') 
+    context = { 'username': username, 'email': email }
+    return render(request, 'content/commercegate.html', context)

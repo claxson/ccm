@@ -137,7 +137,7 @@ def paymentez_payment(up, card, logging, manual):
     payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
 
     # Creo el registro en PaymentHistory
-    ph = PaymentHistory.create(up, card, payment_id, card.integrator, disc_pct, manual)
+    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual)    
     logging.info("paymentez_payment(): Payment history created. ID: %s" % ph.payment_id)
 
 

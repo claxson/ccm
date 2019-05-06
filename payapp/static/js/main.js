@@ -261,8 +261,11 @@ app.renders.boolean = prm => {
 }
 
 app.renders.creditCard = prm => {
+  console.log(prm);
   if (prm) {
     return `<span class="text-black-50">•••• •••• ••••</span> ${prm}`
+  } else {
+    return ''
   }
 }
 
@@ -1048,7 +1051,7 @@ app.navigation = () => {
         columns: [
           { 'title': 'ID', 'data': 'user_id' },
           { 'title': 'Email', 'data': 'email' },
-          { 'title': 'Tarjeta de Crédito', 'data': 'card', 'orderable': false, 'render': data => this.renders.creditCard(data) },
+          { 'title': 'Tarjeta de Crédito', 'data':'card', 'orderable': false, 'render': data => this.renders.creditCard(data) },
           { 'title': 'Activo', 'data': 'is_active', 'orderable': false, 'render': data => this.renders.boolean(data) },
           { 'title': 'País', 'data': 'country' },
           { 'title': 'Expiración', 'type': 'date-eu', 'data': 'expiration', 'render': data => this.renders.date(data) },

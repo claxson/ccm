@@ -46,7 +46,6 @@ class Currency(models.Model):
     name = models.CharField(max_length=64)
     code = models.CharField(max_length=3)
 
-    # Modificado
     def natural_key(self):
         return (self.name)
 
@@ -61,12 +60,18 @@ class Country(models.Model):
     tax        = models.FloatField(default=0, help_text="Example: 21% = 1.21")
     full_price = models.BooleanField(default=True, help_text="True if taxes included in price")
 
-    # Modificado
     def natural_key(self):
         return (self.name)
 
     def __unicode__(self):
         return self.name
+
+    @classmethod
+    def get(cls, name):
+        try:
+            return cls.objects.get(name=name)
+        except Exception:
+            return None
 
     @classmethod
     def get_all(cls):
@@ -79,7 +84,8 @@ class Country(models.Model):
 
 class Integrator(models.Model):
     METHOD = (('TO', 'TOKEN'),
-              ('DI', 'DIRECT'))
+              ('DI', 'DIRECT'),
+              ('EX', 'EXTERNAL'))
 
     name    = models.CharField(max_length=32)
     country = models.ForeignKey(Country)
@@ -87,6 +93,13 @@ class Integrator(models.Model):
 
     def __unicode__(self):
         return "%s_%s" % (self.name, self.country.code)
+    
+    @classmethod
+    def get(cls, name):
+        try:
+            return cls.objects.get(name=name)
+        except Exception:
+            return None
 
 
 class IntegratorSetting(models.Model):
@@ -183,9 +196,9 @@ class User(models.Model):
         self.expiration = date + timedelta(days=1)
         self.save()
         return self.expiration
-		
+        
     def enable_for(self, days):
-    	self.expiration = timezone.now() + timedelta(days=int(days))
+        self.expiration = timezone.now() + timedelta(days=int(days))
         self.save()
         return self.expiration
 
@@ -218,7 +231,7 @@ class User(models.Model):
             return True
         else:
             return False
-        
+
 
 class UserPayment(models.Model):
     STATUS = (('PE', 'Pending'),
@@ -238,9 +251,9 @@ class UserPayment(models.Model):
     user_payment_id   = models.CharField(max_length=128)
     user              = models.ForeignKey(User)
     amount            = models.FloatField(default=0)
-    currency          = models.ForeignKey(Currency)
-    payment_date      = models.DateField(auto_now_add=False, help_text='Next payment date')
-    payday            = models.IntegerField(help_text='Payday number')
+    currency          = models.ForeignKey(Currency, blank=True, null=True)
+    payment_date      = models.DateField(auto_now_add=False, blank=True, null=True, help_text='Next payment date')
+    payday            = models.IntegerField(help_text='Payday number', blank=True, null=True)
     recurrence        = models.IntegerField(help_text="Daily recurrence")
     disc_pct          = models.IntegerField(default=0, help_text="Discount percentage")
     disc_counter      = models.IntegerField(default=0, help_text="Payments with discount remaining")
@@ -248,17 +261,16 @@ class UserPayment(models.Model):
     channel           = models.CharField(max_length=1, choices=CHANNEL, default='E', help_text='Error or cancellation channel')
     message           = models.CharField(max_length=1024, blank=True)
     retries           = models.IntegerField(default=0, help_text='Payment retries')
+    internal          = models.BooleanField(default=True)
     enabled           = models.BooleanField(default=True)
     creation_date     = models.DateTimeField(auto_now_add=True)
     modification_date = models.DateTimeField(auto_now=True, blank=True, null=True)
 
-
-
     def __unicode__(self):
         return self.user_payment_id
-        
+    
     @classmethod
-    def create(cls, user, amount, currency, payment_date, payday, recurrence, discount=0, disc_counter=0):
+    def create(cls, user, recurrence, amount=0, currency=None, payment_date=0, payday=0, discount=0, disc_counter=0, internal=False):
         up = cls()
         up.user_payment_id = "UP_%s_%d" % (user.user_id, int(time.time()))
         up.user            = user
@@ -279,6 +291,7 @@ class UserPayment(models.Model):
         up.recurrence   = int(recurrence)
         up.disc_pct     = int(discount)
         up.disc_counter = int(disc_counter)
+        up.internal     = internal
         up.enabled      = True
         up.save()
         return up
@@ -461,7 +474,7 @@ class PaymentHistory(models.Model):
               ('E', 'Error'))
 
     user_payment      = models.ForeignKey(UserPayment)
-    card              = models.ForeignKey(Card)
+    card              = models.ForeignKey(Card, blank=True, null=True)
     status            = models.CharField(max_length=1, choices=STATUS, default='P')
     payment_id        = models.CharField(max_length=128, help_text='Internal ID')
     gateway_id        = models.CharField(max_length=128, blank=True, null=True, help_text='External ID')
@@ -498,9 +511,15 @@ class PaymentHistory(models.Model):
 
         return {'amount': calc_amount, 'taxable_amount': taxable_amount, 'vat_amount': vat_amount}
 
+    @classmethod
+    def get(cls, user_payment, status):
+        try:
+            return cls.objects.get(user_payment=user_payment, status=status)
+        except Exception:
+            return None
 
     @classmethod
-    def create(cls, user_payment, card, payment_id, integrator, disc_pct=0, manual=False, gateway_id='', status='P'):
+    def create(cls, user_payment, payment_id, integrator, card=None, disc_pct=0, manual=False, gateway_id='', status='P'):
         ph = cls()
         ph.user_payment   = user_payment
         amounts = ph.__amounts_calculator()
@@ -546,4 +565,29 @@ class PaymentHistory(models.Model):
         return "%s" % (self.payment_id)
 
 
+class Package(models.Model):
+    package_id = models.CharField(max_length=10)
+    duration   = models.IntegerField()
+    amount     = models.IntegerField()
+    integrator = models.ForeignKey(Integrator)
 
+    @classmethod
+    def get(cls, duration, integrator):
+        try:
+            return cls.objects.get(duration=duration, integrator=integrator)
+        except Exception:
+            return None
+
+    @classmethod
+    def get_var(cls, duration, key):
+        try:
+            v = cls.objects.get(duration=duration, key=key)
+            if cast:
+                return v.cast()
+            else:
+                return v
+        except ObjectDoesNotExist:
+            return None
+
+    def __unicode__(self):
+        return self.package_id
