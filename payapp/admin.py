@@ -14,6 +14,7 @@ class CurrencyAdmin(admin.ModelAdmin):
 @admin.register(models.User)
 class UserAdmin(admin.ModelAdmin):
     list_display = ['user_id', 'email', 'country', 'expiration', 'creation_date']
+    search_fields = ['user_id', 'email']
 
 @admin.register(models.Country)
 class CountryAdmin(admin.ModelAdmin):
@@ -30,15 +31,18 @@ class IntegratorSettingAdmin(admin.ModelAdmin):
 @admin.register(models.UserPayment)
 class UserPaymentAdmin(admin.ModelAdmin):
     list_display = ['user_payment_id', 'user', 'amount', 'currency', 'payment_date', 'recurrence', 'status', 'enabled', 'creation_date', 'message']
+    search_fields = ['user_payment_id']
 
 @admin.register(models.Card)
 class CardAdmin(admin.ModelAdmin):
     list_display = ['card_id', 'user', 'token', 'integrator', 'enabled', 'deleted', 'creation_date']
+    search_fields = ['card_id']
 
 @admin.register(models.PaymentHistory)
 class PaymentHistoryAdmin(admin.ModelAdmin):
     list_display = ['payment_id', 'user_payment', 'status', 'card', 'gateway_id', 'amount',
                     'taxable_amount', 'vat_amount', 'creation_date', 'modification_date']
+    search_fields = ['payment_id']
 
 @admin.register(models.Package)
 class PackageAdmin(admin.ModelAdmin):
