@@ -491,17 +491,18 @@ def get_payment_history(request, user_payment_id, records='all'):
         try:
             data = json.loads(payment.message.replace("u'", "\"").replace("': '", "\": \"").replace("':", "\":").replace(
                 "',", "\",").replace("'}", "\"}").replace("None", "null").replace("'", "").replace("u\"", "\""))
+
+            if 'transaction' in data:
+                if 'message' in data['transaction']:
+                    payment.description = data['transaction']['message']
+                if 'authorization_code' in data['transaction']:
+                    payment.code = data['transaction']['authorization_code']
         except:
-            continue
-        if 'transaction' in data:
-            if 'message' in data['transaction']:
-                payment.description = data['transaction']['message']
-            if 'authorization_code' in data['transaction']:
-                payment.code = data['transaction']['authorization_code']
+            print 'no message'
 
         ret = {}
         ret['amount']               = payment.amount
-        ret['card']                 = payment.card.number
+        ret['card']                 = ''
         ret['code']                 = payment.code
         ret['creation_date']        = payment.creation_date
         ret['description']          = payment.description
@@ -517,6 +518,9 @@ def get_payment_history(request, user_payment_id, records='all'):
         ret['user_payment_id']      = payment.user_payment.user_payment_id
         ret['user']                 = payment.user_payment.user.user_id
         ret['vat_amount']           = payment.vat_amount
+
+        if payment.card:
+            ret['card'] = payment.card.number
 
         value.append(ret)
 
@@ -630,18 +634,19 @@ def get_all_payment_history(request):
         try:
             message = json.loads(payment.message.replace("u'", "\"").replace("': '", "\": \"").replace("':", "\":").replace(
                 "',", "\",").replace("'}", "\"}").replace("None", "null").replace("'", "").replace("u\"", "\""))
+
+            if 'transaction' in message:
+                if 'message' in message['transaction']:
+                    payment.description = message['transaction']['message']
+                if 'authorization_code' in message['transaction']:
+                    payment.code = message['transaction']['authorization_code']
         except:
-            continue
-        if 'transaction' in message:
-            if 'message' in message['transaction']:
-                payment.description = message['transaction']['message']
-            if 'authorization_code' in message['transaction']:
-                payment.code = message['transaction']['authorization_code']
+            print 'no message'
 
         ret = {}
         ret['amount']               = payment.amount
-        ret['card']                 = payment.card.number
-        ret['card_id']              = payment.card.card_id
+        ret['card']                 = ''
+        ret['card_id']              = ''
         ret['code']                 = payment.code
         ret['creation_date']        = payment.creation_date
         ret['description']          = payment.description
@@ -657,6 +662,10 @@ def get_all_payment_history(request):
         ret['user_payment']         = payment.user_payment.user_payment_id
         ret['user']                 = payment.user_payment.user.user_id
         ret['vat_amount']           = payment.vat_amount
+
+        if payment.card:
+            ret['card'] = payment.card.number
+            ret['card_id'] = payment.card.card_id
 
         data.append(ret)
 
