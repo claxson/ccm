@@ -193,5 +193,4 @@ def cancel_commercegate(request):
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
 
     body = { 'status': 'success' }
-
     return HttpResponse(json.dumps(body), content_type='application/json', status=http_POST_OK)

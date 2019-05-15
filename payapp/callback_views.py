@@ -182,6 +182,10 @@ def callback_paymentez(request):
 def callback_commercegate(request):
     integrator = Integrator.get('commerce_gate')    
 
+    ep       = Setting.get_var('intercom_endpoint')
+    token    = Setting.get_var('intercom_token')
+    intercom = Intercom(ep, token)
+
     try:
         data            = request.body
         request_unquote = urllib.unquote_plus(data)
@@ -210,7 +214,22 @@ def callback_commercegate(request):
         # Setear fecha de expiracion del usuario
         user.set_expiration(up.calc_payment_date(timezone.now()))
 
+        # Posteo en Intercom
+        intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
+        if user.expiration is not None:
+            intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
+             
+        try:
+            reply = intercom.submitEvent(up.user.user_id, up.user.email, "approved-pay", intercom_metadata)
+                                                     
+            if not reply:
+                ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
+                ph.save()
+        except Exception as e:
+            ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
+            ph.save()
         print 'CommerceGate callback: Sale'
+        
     elif transaction_type == 'REBILL':
         up = UserPayment.objects.get(user=user, status='AC')
         payment_id = 'PH_%s_%d' % (user.user_id, int(time()))
@@ -223,12 +242,39 @@ def callback_commercegate(request):
         user.add_to_expiration(up.recurrence)
 
         # Crear payment history
-	PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
+        ph = PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
+        
+        # Posteo en Intercom
+        intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
+        if user.expiration is not None:
+            intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
+        
+        try:
+            reply = intercom.submitEvent(up.user.user_id, up.user.email, "approved-pay", intercom_metadata)
+                                                     
+            if not reply:
+                ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
+                ph.save()
+        except Exception as e:
+            ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
+            ph.save()
 
         print 'CommerceGate callback: Rebill'
+        
     elif transaction_type == 'CANCELMEMBERSHIPNOTIFY':
         up = UserPayment.objects.get(user=user, status='AC')
-	up.cancel('U')
+        up.cancel('U')
+        
+        # Poster pago a Intercom
+        try:
+            reply = intercom.submitEvent(up.user.user_id, up.user.email, "cancelled-sub",
+                                     {"event_description": "recurrencia cancelada por el usuario"})
+            if not reply:
+                up.message = "Intercom error: cannot post the event"
+                up.save()
+        except Exception as e:
+            up.message = "Intercom error: %s" % str(e)
+            up.save()
 
         print 'CommerceGate callback: Cancel membership notify'
     elif transaction_type == 'CANCELMEMBERSHIP':

@@ -40,6 +40,8 @@ from misc import paymentez_intercom_metadata
 
 from intercom import Intercom
 
+from commercegate_views import cancel_commercegate
+
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -488,7 +490,13 @@ def cancel_payment(request):
         message = "user_id %s has not enabled recurring payment" % data['user_id']
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+    
+    # Si el integrador es CommerceGate ejecuto baja para ese integrador
+    ph = PaymentHistory.objects.filter(user_payment=up).order_by('-id')[0]
+    if ph.integrator.name == 'commerce_gate':
+        return cancel_commercegate(request)
         
+
     # Cancelo la recurrencia
     try:
         up.user_cancel()
