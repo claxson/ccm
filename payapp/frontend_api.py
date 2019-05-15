@@ -11,7 +11,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import render, redirect
 
-from models import User, UserPayment, PaymentHistory, Setting, Country
+from models import User, UserPayment, PaymentHistory, Setting, Country, Integrator
 
 import json
 import logging
@@ -767,6 +767,14 @@ def deleteuserpayment(request):
                 registro.status     = 'CA'
                 registro.channel    = 'X'
                 registro.save()
+
+                # Envío cancelación a CommerceGate
+                integrator = Integrator.objects.get(country=registro.user.country)
+
+                if integrator == 'commerce_gate':
+                    user_id = registro.user.user_id
+                    url = 'https://ccm.hotgo.tv/api/v1/commercegate/set/cancel'
+                    resp, content = Http().request(url, 'POST', body={ 'user_id': user_id }, headers={ 'content-type': 'application/json' })
 
                 # Envio envento a intercom
                 ep = Setting.get_var('intercom_endpoint')
