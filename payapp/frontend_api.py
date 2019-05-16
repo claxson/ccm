@@ -21,6 +21,8 @@ from intercom import Intercom
 from misc import make_payment
 from time import mktime
 
+from httplib2 import Http
+
 http_POST_OK = 201
 http_REQUEST_OK = 200
 http_NOT_FOUND = 404
