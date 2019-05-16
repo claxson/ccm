@@ -752,24 +752,26 @@ app.modalRePayStop = (user, id) => {
             loading: true 
           })
       }).done(() => {
-        setInterval(function() {
+
+        let getUserPayment = () => {
           $.ajax({
             type: 'POST',
             url: '/ui/getpaymentstatus/',
             data: data.id
-          }).done((resp) => {
-            console.log(resp);
-
+          }).done(() => {
             if (resp.data == 'CA') {
               alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
               $(app.config.tableSelector).DataTable().ajax.reload(null, false);
             }
-
-            clearInterval();
-          }).always(() => {
-            console.log('Reitento')
+          }).fail(() => {
+            clearInterval(interval)
           });
-        }), 5000;
+        }
+
+        let interval = setInterval(getUserPayment, 5000);
+
+        interval()
+
         // alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
         // $(app.config.tableSelector).DataTable().ajax.reload(null, false);
       }).fail(() => {
