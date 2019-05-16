@@ -771,9 +771,16 @@ def deleteuserpayment(request):
                 # Envio cancelacion a CommerceGate
                 integrator = Integrator.objects.get(country=registro.user.country)
 
+                print '-- Integrador --'
+                print integrator.name
+
                 if integrator.name == 'commerce_gate':
                     url = 'https://ccm.hotgo.tv/api/v1/commercegate/set/cancel'
                     resp, content = Http().request(url, 'POST', body={ 'user_id': registro.user.user_id }, headers={ 'content-type': 'application/json' })
+
+                print '-- Respuesta --'
+                print resp
+                print content
 
                 # Envio envento a Intercom
                 ep = Setting.get_var('intercom_endpoint')
