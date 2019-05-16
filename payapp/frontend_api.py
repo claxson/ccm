@@ -775,13 +775,10 @@ def deleteuserpayment(request):
 
                 print '-- Integrador --'
                 print integrator.name
-            
-                print '-- User ID --'
-                print registro.user.user_id
 
                 if integrator.name == 'commerce_gate':
                     url = 'https://ccm.hotgo.tv/api/v1/commercegate/set/cancel'
-                    resp, content = Http().request(url, 'POST', body={ 'user_id': registro.user.user_id })
+                    resp, content = Http().request(url, 'POST', body={ 'user_id': registro.user.user_id }, headers={ 'content-type': 'application/json' })
 
                 print '-- Respuesta --'
                 print resp
