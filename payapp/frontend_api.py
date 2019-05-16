@@ -850,6 +850,8 @@ def manual_payment(request):
 def getuserpayment(request):
     if request.is_ajax():
         if request.method == 'POST':
+            print '-- Request body --'
+            print request.body
             try:
                 up = UserPayment.get_by_id(request.body)
             except Exception as e:
