@@ -848,12 +848,17 @@ def manual_payment(request):
 @require_http_methods(["POST"])
 @login_required(login_url='login')
 def getuserpayment(request):
-    if request.is_ajax():
-        if request.method == 'POST':
+    if request.method == 'POST':
+        if request.body:
             print '-- Request body --'
             print request.body
             try:
                 up = UserPayment.get_by_id(request.body)
             except Exception as e:
                 return JsonResponse({ 'message': 'Hubo un error', 'data': e.message }, status=500)
-    return JsonResponse({ 'message': '', 'data': up.status }, status=200)
+
+            return JsonResponse({ 'message': '', 'data': up.status }, status=200)
+        else: 
+            return JsonResponse({ 'message': 'El ID es mandatorio' }, status=500)
+    else:
+        return JsonResponse({ 'message': 'Metodo no permitido' }, status=500)
