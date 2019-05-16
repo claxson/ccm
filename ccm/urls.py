@@ -2,7 +2,7 @@ from django.conf.urls import url
 from django.contrib import admin
 
 from payapp.views import create_payment, payment_discount, cancel_payment, change_token_card, user_status, get_cards, get_enabled_card, change_user_email, refund, delete_card
-from payapp.frontend_api import get_user, get_all_users, get_user_payment, get_all_payments, get_payment_history, get_all_payment_history, expireuser, activateuser, deleteuserpayment, manual_payment, filter_countries, filter_status_recurrence, filter_status_history, filter_recurrence, filter_boolean
+from payapp.frontend_api import get_user, get_all_users, get_user_payment, get_all_payments, get_payment_history, get_all_payment_history, expireuser, activateuser, deleteuserpayment, getuserpayment, manual_payment, userpayment, filter_countries, filter_status_recurrence, filter_status_history, filter_recurrence, filter_boolean
 
 from payapp.commercegate_views import payment_commercegate, cancel_commercegate
 
@@ -51,6 +51,7 @@ urlpatterns = [
     url(r'^ui/activateuser', activateuser, name='activateuser'),	
     url(r'^ui/deleteuserpayment', deleteuserpayment, name='deleteuserpayment'),
     url(r'^ui/manualpayment', manual_payment, name='manual_payment'),
+    url(r'^ui/getuserpayment', getuserpayment, name='getuserpayment'),
 
     url(r'^ui/login/', login_view, name='login'),
     url(r'^ui/logout/', logout_view, name='logout'),
