@@ -851,7 +851,7 @@ def getuserpayment(request):
     if request.is_ajax():
         if request.method == 'POST':
             try:
-                up = UserPayment.get_by_id(request)
+                up = UserPayment.get_by_id(request.body)
             except Exception as e:
                 return JsonResponse({ 'message': 'Hubo un error', 'data': e.message }, status=500)
     return JsonResponse({ 'message': '', 'data': up.status }, status=200)
