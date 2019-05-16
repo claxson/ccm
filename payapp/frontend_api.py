@@ -784,7 +784,6 @@ def deleteuserpayment(request):
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
 
                 print '-- Respuesta --'
-                print resp
                 print content
 
                 # Envio envento a Intercom
