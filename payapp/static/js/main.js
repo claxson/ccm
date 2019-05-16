@@ -717,13 +717,14 @@ app.modalUserDesactivate = prm => {
  * Recurrencias - Modal detener recurrencia
  * @param {string} user - ID del usuario
  * @param {string} id - ID de pago recurrente
+ * @todo Chequear estado del userpayment
  */
 app.modalRePayStop = (user, id) => {
   this.modal({
     title: 'Desactivar recurrencia',
     body: `<span class="badge badge-light">Usuario ${user}</span>
            <hr>
-           <form id="desactivate_pay">
+           <form>
             <div class="form-group" novalidate>
               <label for="txtmessage">Mensaje</label>
               <input type="hidden" id="userpayment_id" name="userpayment_id" value="${id}">
@@ -734,8 +735,6 @@ app.modalRePayStop = (user, id) => {
     footer: ` <a href="javascript:void(0)" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</a>
               <a href="javascript:void(0)" class="btn btn-sm btn-danger" id="btnDesactivatePay">Desactivar</a>`
   });
-
-  let form = $('#desactivate_pay');
 
   $('#btnDesactivatePay').on('click', () => {
       let data = {
@@ -753,8 +752,26 @@ app.modalRePayStop = (user, id) => {
             loading: true 
           })
       }).done(() => {
-        alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
-        $(app.config.tableSelector).DataTable().ajax.reload(null, false);
+        setInterval(function() {
+          $.ajax({
+            type: 'POST',
+            url: '/ui/getpaymentstatus/',
+            data: data.id
+          }).done((resp) => {
+            console.log(resp);
+
+            if (resp.data == 'CA') {
+              alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+              $(app.config.tableSelector).DataTable().ajax.reload(null, false);
+            }
+
+            clearInterval();
+          }).always(() => {
+            console.log('Reitento')
+          });
+        }), 5000;
+        // alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+        // $(app.config.tableSelector).DataTable().ajax.reload(null, false);
       }).fail(() => {
         alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
       }).always(() => {

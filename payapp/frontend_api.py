@@ -771,12 +771,11 @@ def deleteuserpayment(request):
                 # Envío cancelación a CommerceGate
                 integrator = Integrator.objects.get(country=registro.user.country)
 
-                if integrator == 'commerce_gate':
-                    user_id = registro.user.user_id
+                if integrator.name == 'commerce_gate':
                     url = 'https://ccm.hotgo.tv/api/v1/commercegate/set/cancel'
-                    resp, content = Http().request(url, 'POST', body={ 'user_id': user_id }, headers={ 'content-type': 'application/json' })
+                    resp, content = Http().request(url, 'POST', body={ 'user_id': registro.user.user_id }, headers={ 'content-type': 'application/json' })
 
-                # Envio envento a intercom
+                # Envío envento a Intercom
                 ep = Setting.get_var('intercom_endpoint')
                 token = Setting.get_var('intercom_token')
 
@@ -836,3 +835,14 @@ def manual_payment(request):
             except Exception:
                 return JsonResponse({'message': 'Hubo un error'}, status=500)
     return JsonResponse({'message': 'metodo no permitido'}, status=500)
+
+@require_http_methods(["POST"])
+@login_required(login_url='login')
+def getuserpayment(request):
+    if request.is_ajax():
+        if request.method == 'POST':
+            try:
+                up = UserPayment.get_by_id(request)
+            except Exception as e:
+                return JsonResponse({ 'message': 'Hubo un error', 'data': e.message }, status=500)
+    return JsonResponse({ 'message': '', 'data': up.status }, status=200)
