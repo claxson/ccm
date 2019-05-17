@@ -757,8 +757,9 @@ app.modalRePayStop = (user, id) => {
             type: 'POST',
             url: '/ui/getuserpayment/',
             data: data.id
-          }).done(() => {
+          }).done((resp) => {
             if (resp.data == 'CA') {
+              clearInterval(interval)
               alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
               $(app.config.tableSelector).DataTable().ajax.reload(null, false);
             }
@@ -771,9 +772,6 @@ app.modalRePayStop = (user, id) => {
         let interval = setInterval(getUserPayment, 5000);
 
         interval()
-
-        // alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
-        // $(app.config.tableSelector).DataTable().ajax.reload(null, false);
       }).fail(() => {
         alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
       }).always(() => {
@@ -785,7 +783,6 @@ app.modalRePayStop = (user, id) => {
         });
       });
   })
-
 }
 
 /**
