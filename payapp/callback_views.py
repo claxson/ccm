@@ -199,6 +199,9 @@ def callback_commercegate(request):
     user_id = xml_data['UserID']
     user = User.objects.get(user_id=user_id)
 
+    if 'TransactionReferenceID' in xml_data:
+        transaction_reference_id = xml_data['TransactionReferenceID']
+
     if transaction_type == 'SALE':
         up = UserPayment.objects.get(user=user, status='PE')
         ph = PaymentHistory.objects.get(user_payment__user_payment_id=up.user_payment_id, status='P')
@@ -281,8 +284,13 @@ def callback_commercegate(request):
         user.expire()
 
         print 'CommerceGate callback: Cancel membership'
+    elif transaction_type == 'REFUND'
+        try:
+            ph = PaymentHistory.objects.get(gateway_id=transaction_reference_id)
+            ph.cancel(transaction_id, 'refund')
+        except:
+            print 'Refund: Transaction ID %s not found' %transaction_reference_id
 
     print xml
 
-    # Test
     return HttpResponse('SUCCESS', content_type='text/plain', status='200')

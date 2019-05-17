@@ -765,6 +765,7 @@ app.modalRePayStop = (user, id) => {
             }
           }).fail(() => {
             clearInterval(interval)
+            alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
           });
         }
 

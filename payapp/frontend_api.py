@@ -778,7 +778,6 @@ def deleteuserpayment(request):
 
                 if integrator.name == 'commerce_gate':
                     url = 'https://ccm.hotgo.tv/api/v1/commercegate/set/cancel'
-                    # urllib.urlencode(data)
                     user_id = { 'user_id': registro.user.user_id }
                     data = json.dumps(user_id)
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
