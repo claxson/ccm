@@ -261,7 +261,6 @@ app.renders.boolean = prm => {
 }
 
 app.renders.creditCard = prm => {
-  console.log(prm);
   if (prm) {
     return `<span class="text-black-50">•••• •••• ••••</span> ${prm}`
   } else {
@@ -756,7 +755,7 @@ app.modalRePayStop = (user, id) => {
         let getUserPayment = () => {
           $.ajax({
             type: 'POST',
-            url: '/ui/getpaymentstatus/',
+            url: '/ui/getuserpayment/',
             data: data.id
           }).done(() => {
             if (resp.data == 'CA') {
