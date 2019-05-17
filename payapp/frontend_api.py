@@ -133,13 +133,15 @@ def get_user(request, user_id):
     card = user.get_card()
 
     ret                     = {}
-    ret['card']             = card.number
     ret['country']          = user.country.name
     ret['creation_date']    = user.creation_date
     ret['email']            = user.email
     ret['expiration']       = user.expiration
     ret['is_active']        = user.is_active
     ret['user_id']          = user_id
+
+    if 'number' in card:
+        ret['card'] = card.number
 
     body = { 'status': 'success', 'value': ret }
     return HttpResponse(json.dumps(body, cls=DjangoJSONEncoder), content_type='application/json', status=http_REQUEST_OK)
