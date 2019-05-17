@@ -284,7 +284,7 @@ def callback_commercegate(request):
         user.expire()
 
         print 'CommerceGate callback: Cancel membership'
-    elif transaction_type == 'REFUND'
+    elif transaction_type == 'REFUND':
         try:
             ph = PaymentHistory.objects.get(gateway_id=transaction_reference_id)
             ph.cancel(transaction_id, 'refund')
