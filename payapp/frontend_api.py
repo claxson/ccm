@@ -140,7 +140,7 @@ def get_user(request, user_id):
     ret['is_active']        = user.is_active
     ret['user_id']          = user_id
 
-    if 'number' in card:
+    if card:
         ret['card'] = card.number
 
     body = { 'status': 'success', 'value': ret }
