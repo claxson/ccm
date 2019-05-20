@@ -765,6 +765,7 @@ app.modalRePayStop = (user, id) => {
                   if (textStatus == 'success') {
                     if (data.data == 'CA') {
                       alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+                      $(app.config.tableSelector).DataTable().ajax.reload(null, false);
                       $('.modal-body').prepend(alert);
                       $('#txtmessage').attr('disabled', true);
                       this.loadingButton({
@@ -787,57 +788,14 @@ app.modalRePayStop = (user, id) => {
             )
           } else {
             alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
+            $('.modal-body').prepend(alert);
+            $('#txtmessage').attr('disabled', true);
+            this.loadingButton({
+              selector: '#btnDesactivatePay',
+              loading: false
+            });
           }
         });
-
-      // $.when(deleteUser(dataJson))
-      //   .then((resp) => {
-      //     if (resp) {
-      //       console.log(resp)
-      //     }
-      //     getUserPayment(data.id)
-      //   });
-
-      // $.ajax({
-      //   type: 'POST',
-      //   url: '/ui/deleteuserpayment/',
-      //   data: JSON.stringify(data),
-      //   beforeSend:
-      //     this.loadingButton({
-      //       selector: '#btnDesactivatePay',
-      //       loading: true 
-      //     })
-      // }).done(() => {
-      //   let getUserPayment = () => {
-      //     $.ajax({
-      //       type: 'POST',
-      //       url: '/ui/getuserpayment/',
-      //       data: data.id
-      //     }).done((resp) => {
-      //       if (resp.data == 'CA') {
-      //         clearInterval(interval)
-      //         alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
-      //         $(app.config.tableSelector).DataTable().ajax.reload(null, false);
-      //       }
-      //     }).fail(() => {
-      //       clearInterval(interval)
-      //       alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
-      //     });
-      //   }
-
-      //   let interval = setInterval(getUserPayment, 5000);
-
-        
-      // }).fail(() => {
-      //   alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
-      // }).always(() => {
-      //   $('.modal-body').prepend(alert);
-      //   $('#txtmessage').attr('disabled', true);
-      //   this.loadingButton({
-      //     selector: '#btnDesactivatePay',
-      //     loading: false
-      //   });
-      // });
   })
 }
 

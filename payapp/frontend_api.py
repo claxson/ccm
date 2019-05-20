@@ -775,17 +775,11 @@ def deleteuserpayment(request):
                 # Envio cancelacion a CommerceGate
                 integrator = Integrator.objects.get(country=registro.user.country)
 
-                print '-- Integrador --'
-                print integrator.name
-
                 if integrator.name == 'commerce_gate':
                     url = 'http://ccm-stg.claxson.com/api/v1/commercegate/set/cancel'
                     user_id = { 'user_id': registro.user.user_id }
                     data = json.dumps(user_id)
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
-
-                print '-- Respuesta --'
-                print content
 
                 # Envio envento a Intercom
                 ep = Setting.get_var('intercom_endpoint')
