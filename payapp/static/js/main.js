@@ -751,28 +751,42 @@ app.modalRePayStop = (user, id) => {
 
       let dataString = JSON.stringify(paymentData);
 
+      this.loadingButton({
+        selector: '#btnDesactivatePay',
+        loading: true
+      })
+
       $.when(deleteUser(dataString))
-        .then((data, textStatus, jqXHR) => {
+        .then((data, textStatus) => {
           if (textStatus == 'success') {
             let interval = setInterval(
               getUserPayment(paymentData.userpayment_id)
-                .then((data, textStatus, jqXHR) => {
+                .then((data, textStatus) => {
                   if (textStatus == 'success') {
                     if (data.data == 'CA') {
-                      console.log('OK');
-                      console.log(jqXHR);
+                      alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+                      $('.modal-body').prepend(alert);
+                      $('#txtmessage').attr('disabled', true);
+                      this.loadingButton({
+                        selector: '#btnDesactivatePay',
+                        loading: false
+                      });
                       clearInterval(interval);
-                    } else {
-                      console.log('NO CA');
-                      console.log(jqXHR);
                     }
                   } else {
-                    console.log('ERROR');
+                    alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
+                    $('.modal-body').prepend(alert);
+                    $('#txtmessage').attr('disabled', true);
+                    this.loadingButton({
+                      selector: '#btnDesactivatePay',
+                      loading: false
+                    });
+                    clearInterval(interval);
                   }
               }), 5000
             )
           } else {
-            console.log('ERROR AL ELIMINAR')
+            alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
           }
         });
 
