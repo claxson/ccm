@@ -970,7 +970,7 @@ app.modalHisDetail = prm => {
                                                 role="button" aria-expanded="false" 
                                                 aria-controls="message"
                                                 data-toggle="collapse" 
-                                                class="badge badge-secondary">
+                                                class="badge badge-secondary ${row.message ? 'visible' : 'invisible'}">
                                                   <span>Ver mensaje</span>
                                                   <span style="display:none;">Ocultar mensaje</span>
                                                 </a>
