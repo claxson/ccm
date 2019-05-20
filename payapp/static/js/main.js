@@ -716,7 +716,6 @@ app.modalUserDesactivate = prm => {
  * Recurrencias - Modal detener recurrencia
  * @param {string} user - ID del usuario
  * @param {string} id - ID de pago recurrente
- * @todo Chequear estado del userpayment
  */
 app.modalRePayStop = (user, id) => {
   this.modal({
@@ -758,13 +757,26 @@ app.modalRePayStop = (user, id) => {
       $.when(deleteUser(dataString))
         .then((data, textStatus) => {
           if (textStatus == 'success') {
+            let intervalCount = 0;
             let interval = setInterval(
               getUserPayment(paymentData.userpayment_id)
                 .then((data, textStatus) => {
-                  if (textStatus == 'success') {
-                    if (data.data == 'CA') {
-                      alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
-                      $(app.config.tableSelector).DataTable().ajax.reload(null, false);
+                  if (intervalCount <= 5) {
+                    if (textStatus == 'success') {
+                      if (data.data == 'CA') {
+                        alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+                        $(app.config.tableSelector).DataTable().ajax.reload(null, false);
+                        $('.modal-body').prepend(alert);
+                        $('#txtmessage').attr('disabled', true);
+                        this.loadingButton({
+                          selector: '#btnDesactivatePay',
+                          loading: false
+                        });
+                        clearInterval(interval);
+                      }
+                      intervalCount++
+                    } else {
+                      alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
                       $('.modal-body').prepend(alert);
                       $('#txtmessage').attr('disabled', true);
                       this.loadingButton({
