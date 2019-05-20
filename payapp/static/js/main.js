@@ -958,7 +958,7 @@ app.modalHisDetail = prm => {
                           <p><b>Tarjeta de Crédito:</b> ${row.card_id}</p>
                           <p><b>Número Tarjeta de Crédito:</b> ${this.renders.creditCard(row.card)}</p>
                           <p><b>Estado:</b> ${this.renders.hisPayState(row.status)}</p>
-                          <p><b>Integrador:</b> ${row.integrator} (${row.gateway_id})</p>
+                          <p><b>Integrador:</b> ${row.integrator} ${'(' + row.gateway_id + ')'}</p>
                         </div>
                         <div class="col-5">
                           <p><b>Monto:</b> ${row.amount}</p>
