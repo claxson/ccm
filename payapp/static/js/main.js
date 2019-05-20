@@ -751,11 +751,27 @@ app.modalRePayStop = (user, id) => {
 
       let dataJson = JSON.stringify(data);
 
-      $.when(getUserPayment(data.userpayment_id))
+      $.when(deleteUser(dataJson))
         .then((data, textStatus, jqXHR) => {
-          console.log(data);
-          console.log(textStatus);
-          console.log(jqXHR);
+          if (textStatus == 'success') {
+            let interval = setInterval(
+              getUserPayment(data.userpayment_id)
+                .then((data, textStatus, jqXHR) => {
+                  if (textStatus == 'success') {
+                    if (data.data == 'CA') {
+                      console.log('OK');
+                      console.log(jqXHR);
+                      clearInterval(interval);
+                    } else {
+                      console.log('NO CA');
+                      console.log(jqXHR);
+                    }
+                  } else {
+                    console.log('ERROR');
+                  }
+              }), 5000
+            )
+          }
         });
 
       // $.when(deleteUser(dataJson))
