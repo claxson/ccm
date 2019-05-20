@@ -749,9 +749,9 @@ app.modalRePayStop = (user, id) => {
         'txtmessage': $('#txtmessage').val()
       }
 
-      let dataJson = JSON.stringify(data);
+      let dataString = JSON.stringify(data);
 
-      $.when(deleteUser(dataJson))
+      $.when(deleteUser(dataString))
         .then((data, textStatus, jqXHR) => {
           if (textStatus == 'success') {
             let interval = setInterval(
@@ -771,6 +771,8 @@ app.modalRePayStop = (user, id) => {
                   }
               }), 5000
             )
+          } else {
+            console.log('ERROR AL ELIMINAR')
           }
         });
 
