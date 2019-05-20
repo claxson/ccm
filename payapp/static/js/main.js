@@ -744,18 +744,18 @@ app.modalRePayStop = (user, id) => {
   }
 
   $('#btnDesactivatePay').on('click', () => {
-      let data = {
+      let paymentData = {
         'userpayment_id': id,
         'txtmessage': $('#txtmessage').val()
       }
 
-      let dataString = JSON.stringify(data);
+      let dataString = JSON.stringify(paymentData);
 
       $.when(deleteUser(dataString))
         .then((data, textStatus, jqXHR) => {
           if (textStatus == 'success') {
             let interval = setInterval(
-              getUserPayment(data.userpayment_id)
+              getUserPayment(paymentData.userpayment_id)
                 .then((data, textStatus, jqXHR) => {
                   if (textStatus == 'success') {
                     if (data.data == 'CA') {
