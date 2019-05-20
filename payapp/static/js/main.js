@@ -752,7 +752,7 @@ app.modalRePayStop = (user, id) => {
 
       let dataJson = JSON.stringify(data);
 
-      $.when(getUserPayment(data.id))
+      $.when(getUserPayment(data.userpayment_id))
         .then((resp) => {
           console.log(resp);
         });
