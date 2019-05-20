@@ -736,12 +736,11 @@ app.modalRePayStop = (user, id) => {
   });
 
   let deleteUser = (data) => {
-    $.post('/ui/deleteuserpayment/', data)
+    return $.post('/ui/deleteuserpayment/', data)
   }
 
   let getUserPayment = (data) => {
-    console.log(data);
-    $.post('/ui/getuserpayment/', data);
+    return $.post('/ui/getuserpayment/', data);
   }
 
   $('#btnDesactivatePay').on('click', () => {
@@ -753,8 +752,10 @@ app.modalRePayStop = (user, id) => {
       let dataJson = JSON.stringify(data);
 
       $.when(getUserPayment(data.userpayment_id))
-        .then((resp) => {
-          console.log(resp);
+        .then((data, textStatus, jqXHR) => {
+          console.log(data);
+          console.log(textStatus);
+          console.log(jqXHR);
         });
 
       // $.when(deleteUser(dataJson))
