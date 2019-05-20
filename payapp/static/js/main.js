@@ -740,7 +740,8 @@ app.modalRePayStop = (user, id) => {
   }
 
   let getUserPayment = (data) => {
-    $.post('/ui/getuserpayment/', data)
+    console.log(data);
+    $.post('/ui/getuserpayment/', data);
   }
 
   $('#btnDesactivatePay').on('click', () => {
