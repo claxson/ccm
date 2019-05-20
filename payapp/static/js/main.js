@@ -731,8 +731,7 @@ app.modalRePayStop = (user, id) => {
               <small id="emailHelp" class="form-text text-muted">Ingrese un mensaje (opcional).</small>
             </div>
            </form>`,
-    footer: ` <a href="javascript:void(0)" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</a>
-              <a href="javascript:void(0)" class="btn btn-sm btn-danger" id="btnDesactivatePay">Desactivar</a>`
+    footer: ` <a href="javascript:void(0)" class="btn btn-sm btn-danger" id="btnDesactivatePay">Desactivar</a>`
   });
 
   let deleteUser = (data) => {
