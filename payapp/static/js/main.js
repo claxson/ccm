@@ -741,6 +741,9 @@ app.modalRePayStop = (user, id) => {
     return $.post('/ui/getuserpayment/', data);
   }
 
+  let alertErrorText = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
+  let alertSuccessText = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
+
   $('#btnDesactivatePay').on('click', () => {
       let paymentData = {
         'userpayment_id': id,
@@ -764,9 +767,8 @@ app.modalRePayStop = (user, id) => {
                   if (intervalCount <= 5) {
                     if (textStatus == 'success') {
                       if (data.data == 'CA') {
-                        alert = '<div class="alert alert-success" role="alert">Recurrencia desactivada correctamente.</div>';
                         $(app.config.tableSelector).DataTable().ajax.reload(null, false);
-                        $('.modal-body').prepend(alert);
+                        $('.modal-body').prepend(alertSuccessText);
                         $('#txtmessage').attr('disabled', true);
                         this.loadingButton({
                           selector: '#btnDesactivatePay',
@@ -776,8 +778,7 @@ app.modalRePayStop = (user, id) => {
                       }
                       intervalCount++
                     } else {
-                      alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
-                      $('.modal-body').prepend(alert);
+                      $('.modal-body').prepend(alertErrorText);
                       $('#txtmessage').attr('disabled', true);
                       this.loadingButton({
                         selector: '#btnDesactivatePay',
@@ -786,8 +787,7 @@ app.modalRePayStop = (user, id) => {
                       clearInterval(interval);
                     }
                   } else {
-                    alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
-                    $('.modal-body').prepend(alert);
+                    $('.modal-body').prepend(alertErrorText);
                     $('#txtmessage').attr('disabled', true);
                     this.loadingButton({
                       selector: '#btnDesactivatePay',
@@ -798,8 +798,7 @@ app.modalRePayStop = (user, id) => {
               }), 5000
             )
           } else {
-            alert = '<div class="alert alert-danger" role="alert">Error al intentar desactivar la concurrencia.</div>';
-            $('.modal-body').prepend(alert);
+            $('.modal-body').prepend(alertErrorText);
             $('#txtmessage').attr('disabled', true);
             this.loadingButton({
               selector: '#btnDesactivatePay',
