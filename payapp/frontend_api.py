@@ -756,17 +756,14 @@ def activateuser(request):
 def deleteuserpayment(request):
     if request.is_ajax():
         if request.method == 'POST':
-            txtmessage = ''
-
             try:
                 json_data = json.loads(request.body)
 
-                if json_data['txtmessage']:
-                    txtmessage = json_data['txtmessage']
+                if json_data['txtmessage'] != '':
+                    registro.message = json_data['txtmessage']
 
                 userpayment_id      = json_data['userpayment_id']
                 registro            = UserPayment.objects.get(user_payment_id=userpayment_id)
-                registro.message    = txtmessage
                 registro.enabled    = False
                 registro.status     = 'CA'
                 registro.channel    = 'X'
