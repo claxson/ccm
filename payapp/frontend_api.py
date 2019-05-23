@@ -759,11 +759,12 @@ def deleteuserpayment(request):
             try:
                 json_data = json.loads(request.body)
 
+                userpayment_id      = json_data['userpayment_id']
+                registro            = UserPayment.objects.get(user_payment_id=userpayment_id)
+
                 if json_data['txtmessage'] != '':
                     registro.message = json_data['txtmessage']
 
-                userpayment_id      = json_data['userpayment_id']
-                registro            = UserPayment.objects.get(user_payment_id=userpayment_id)
                 registro.enabled    = False
                 registro.status     = 'CA'
                 registro.channel    = 'X'
