@@ -111,3 +111,6 @@ log/
 
 # visual studio code
 .vscode
+
+#macOS
+*.DS_Store
