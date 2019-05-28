@@ -67,7 +67,6 @@ def unicodetoascii(text):
                             }
     return text.decode('utf-8').translate(uni2ascii).encode('ascii')
 
-
 def paymentez_translator(content):
     ret = {}
     if "status_detail" in content["transaction"]:
@@ -111,7 +110,39 @@ def paymentez_intercom_metadata(data):
             ret[key] = data[key]
 
     return ret
+    
+def pagodigital_intercom_metadata(data):
+    ret = {"integrator": "paymentez",
+           "authorization_code": "",
+           "id": "",
+           "status_detail": "",
+           "amount": "",
+           "expire_at": ""}
 
+    for key in ret.keys():
+        if key in data:
+            ret[key] = data[key]
+
+    return ret    
+    
+
+def post_to_intercom(ph, event, content):
+    ep    = Setting.get_var('intercom_endpoint')
+    token = Setting.get_var('intercom_token')
+    if ph.user_payment.user.expiration is not None:
+        content['transaction']['expire_at'] = mktime(ph.user_payment.user.expiration.timetuple())
+    try:
+        intercom = Intercom(ep, token)
+        reply = intercom.submitEvent(ph.user_payment.user.user_id, ph.user_payment.user.email, event,
+                                     pagodigital_intercom_metadata(content['transaction']))
+        if not reply:
+            ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
+            ph.save()
+    except Exception as e:
+        ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
+        ph.save()    
+
+    return ph
     
 def paymentez_payment(up, card, logging, manual):
     try:
@@ -247,10 +278,115 @@ def paymentez_payment(up, card, logging, manual):
 
         return False
 
+        
+def pagodigital_payment(up, card, logging, manual):
+    # Aplico descuento si corresponde
+    disc_flag = False
+    if up.disc_counter > 0:
+        disc_flag = True
+        disc_pct  = up.disc_pct
+        logging.info("pagodigital_payment(): Calculating discount.")
+    else:
+        disc_pct = 0
+        
+    # Genero tx id sumando al userid el timestamp
+    payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
 
-def make_payment(up, card, logging, manual=False):
+    # Creo el registro en PaymentHistory
+    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual)    
+    logging.info("pagodigital_payment(): Payment history created. ID: %s" % ph.payment_id)
+    
+    if ph.amount > 0:
+        # Realizar pago
+        pd_endpoint = IntegratorSetting.get_var(form.integrator, 'endpoint')
+        pd_user     = IntegratorSetting.get_var(form.integrator, 'user')
+        pd_password = IntegratorSetting.get_var(form.integrator, 'password')
+        try:
+            # ---- Hacer libreria para pago digital ----
+            pass
+        except Exception as e:
+            # ---------- Analizar que pasa ante un error en el pago ---------------
+            logging.info("pagodigital_payment(): Communication error. New PaymentHistory status: Waiting Callback")
+            # Pongo el pago en Waiting Callback
+            ph.status = "W"
+            ph.save()
+            return False
+    else:
+        ret = True
+        content = {'transaction': {'status_detail':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}}
+        
+    if ret:
+        # Obtengo los valores segun la respuesta de Pagodigital
+        pr = pagodigital_translator(content)
+        # Seteo los valores de la UserPayment
+        logging.info("pagodigitalz_payment(): Setting UserPayment values: status: %s - enabled: %s - message: %s"
+                     % (pr["up_status"], str(pr["up_recurrence"]), pr["up_recurrence"]))
+        up.status  = pr["up_status"]
+        up.message = pr["up_message"]
+        up.enabled = pr["up_recurrence"]
+
+        if up.status == 'AC':
+            # calcular next_payment_day
+            up.payment_date = up.calc_payment_date()
+            # Fija la fecha de expiration del usuario
+            logging.info("pagodigital_payment(): New user expiration %d for user %s" % (up.recurrence, up.user.user_id))
+            user.set_expiration(up.payment_date)
+            if disc_flag:
+                up.disc_counter = up.disc_counter - 1
+            up.retries = 0
+            ret = True
+        else:
+            if manual:
+                up.retries = up.retries + 1
+            else:
+                # Agregar N dias a expiration
+                delay = int(Setting.get_var('expiration_delay')) - 1
+                user_expiration = up.user.expiration + timedelta(days=delay)
+                up.user.set_expiration(user_expiration)
+            logging.info("paymentez_payment(): Payment executed with errors - UserPayment: %s - PaymentHistory: %s" % (up.user_payment_id, payment_id))
+            up.channel = 'R'
+            ret = False
+        up.save()       
+
+        # Seteo los valores del PaymentHistory
+        logging.info("pagodigital_payment(): Setting PaymentHistory values: status: %s - gateway_id: %s - message: %s"
+                     % (pr["ph_status"], pr["ph_gatewayid"], pr["ph_message"]))
+        ph.status     = pr["ph_status"]
+        ph.gateway_id = pr["ph_gatewayid"]
+        ph.message    = pr["ph_message"]
+        ph.save()
+
+        if pr["user_expire"]:
+            user.expire()
+            
+        # Posteo en intercomo si es requerido
+        if pr["intercom"]["action"]:
+            logging.info("pagodigital_payment(): Sending event to Intercom: %s" % pr["intercom"]["event"])
+            ph = post_to_intercom(ph, pr["intercom"]["event"], paymentez_intercom_metadata(content['transaction']))               
+
+        logging.info("paymentez_payment(): Payment executed succesfully - UserPayment: %s" % up.user_payment_id)
+        return ret
+    
+    else:
+        logging.info("pagodigital_payment(): Payment executed with errors - UserPayment: %s - PaymentHistory: %s" % (up.user_payment_id, payment_id))
+        message = 'type: %s, help: %s, description: %s' % (content['error']['type'],
+                                                           content['error']['help'],
+                                                           content['error']['description'])
+        if manual:
+            up.add_retry()
+        up.reply_recurrence_error(message)
+        ph.error('', content)
+
+        return False
+        
+        
+        
+def make_payment(up, card, logging=None, manual=False):
     if card.integrator.name == 'paymentez':
         ret = paymentez_payment(up, card, logging, manual)
+    elif card.integrator.name == 'pagodigital':
+        ret = pagodigital_payment(up, card, logging, manual)
     else:
         ret = False
     return ret
+    

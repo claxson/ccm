@@ -10,6 +10,8 @@ from payapp.frontend_views import login_view, logout_view, dashboard, users, use
 
 from payapp.callback_views import callback_paymentez, callback_commercegate
 
+from payapp.pagodigital_views import payment_pagodigital, form_pagodigital
+
 urlpatterns = [
 
     url(r'^admin/', admin.site.urls),
@@ -25,12 +27,15 @@ urlpatterns = [
     url(r'^api/v1/get/enabledcard/(?P<user_id>[\w\-]+)', get_enabled_card),
     url(r'^api/v1/get/refund/(?P<payment_id>[\w\-]+)', refund),
 
-    # form test
-    url(r'^ui/commercegate/', commercegate, name='commercegate'),
-
+    # Commerce Gate
     url(r'^api/v1/callback/commercegate', callback_commercegate),
     url(r'^api/v1/commercegate/get/form', payment_commercegate),
     url(r'^api/v1/commercegate/set/cancel', cancel_commercegate),
+    
+    # Pago Digital
+    url(r'^api/v1/pagodigital/set/payment', payment_pagodigital),
+    url(r'^api/v1/pagodigital/form', form_pagodigital),
+    
 
     url(r'^api/v1/api/users/(?P<user_id>[\w\-]+)', get_user),
     url(r'^api/v1/api/users', get_all_users),

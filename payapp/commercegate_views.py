@@ -37,6 +37,16 @@ def __validate_json(json_data, keys):
             return {'status': 'error', 'message': message}
 
     return {'status': 'success'}
+    
+def __check_apikey(request):
+    if 'HTTP_X_AUTH_CCM_KEY' in request.META:
+        if request.META['HTTP_X_AUTH_CCM_KEY'] == Setting.get_var('ma_apikey'):
+            return {'status': 'success'}
+        else:
+            return {'status': 'error'}
+    else:
+        return {'status': 'error'}    
+
 
 # Integrator Settings
 integrator           = Integrator.get('commerce_gate')
@@ -57,6 +67,11 @@ password             = IntegratorSetting.get_var(integrator, 'password')
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @require_http_methods(["POST"])
 def payment_commercegate(request):
+    # Verifico ApiKey
+    cap = __check_apikey(request)
+    if cap['status'] == 'error':
+        return HttpResponse(status=http_UNAUTHORIZED)
+
     # Cargo el JSON
     try:
         data = json.loads(request.body)

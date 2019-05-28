@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import MultipleObjectsReturned
 
+import hashlib
 import time
 # Create your models here.
 
@@ -155,7 +156,16 @@ class User(models.Model):
 
     def __unicode__(self):
         return self.user_id
-        
+    
+    @classmethod
+    def get(cls, user_id):
+        try:
+            return User.objects.get(user_id=user_id)
+        except ObjectDoesNotExist:
+            return None
+        except MultipleObjectsReturned:
+            return None
+    
     @classmethod
     def create(cls, user_id, email, country):
         us            = cls()
@@ -277,11 +287,6 @@ class UserPayment(models.Model):
         up.amount          = float(amount)
         up.currency        = currency
         if payment_date == 0 or payment_date == 0.0 or payment_date == '0':
-            #np = timezone.now() + timezone.timedelta(days=int(recurrence))
-            #if int(recurrence) >= 30:
-            #    up.payment_date = datetime(np.year,np.month,payday)
-            #else:
-            #    up.payment_date = datetime(np.year,np.month,np.day)
             up.payment_date = timezone.now()
             up.status       = 'PE'
         else:
@@ -302,6 +307,20 @@ class UserPayment(models.Model):
             return cls.objects.get(user_payment_id=up_id)
         except ObjectDoesNotExist:
             return None
+    
+    @classmethod
+    def get_active(cls, user):
+        try:
+            return cls.objects.get(user=user, enabled=True, status='AC')
+        except ObjectDoesNotExist:
+            return None
+            
+    @classmethod
+    def get_enabled(cls, user):
+        try:
+            return cls.objects.get(user=user, enabled=True)
+        except ObjectDoesNotExist:
+            return None        
     
     def discount(self, discount, disc_counter):
         self.disc_pct     = discount
@@ -451,6 +470,14 @@ class Card(models.Model):
         cd.save()
         return cd
     
+    @classmethod
+    def get_by_token(cls, user, token):
+        try:
+            return cls.objects.get(user=user, token=token)
+        except ObjectDoesNotExist:
+            return None
+    
+    
     def enable(self):
         self.deleted = False
         self.enabled = True
@@ -570,12 +597,15 @@ class Package(models.Model):
     duration   = models.IntegerField()
     amount     = models.FloatField()
     integrator = models.ForeignKey(Integrator)
+    enabled    = models.BooleanField(default=False)
 
     @classmethod
     def get(cls, duration, integrator):
         try:
-            return cls.objects.get(duration=duration, integrator=integrator)
-        except Exception:
+            return cls.objects.get(duration=duration, integrator=integrator, enabled=True)
+        except ObjectDoesNotExist:
+            return None
+        except MultipleObjectsReturned:
             return None
 
     @classmethod
@@ -591,3 +621,41 @@ class Package(models.Model):
 
     def __unicode__(self):
         return self.package_id
+
+class Form(models.Model):
+    user       = models.ForeignKey(User)
+    token      = models.CharField(max_length=32)
+    expiration = models.IntegerField()
+    template   = models.CharField(max_length=64)
+    integrator = models.ForeignKey(Integrator)
+    package    = models.ForeignKey(Package)
+    
+    def __unicode__(self):
+        return self.token
+        
+    @classmethod
+    def create(cls, user, integrator, package, template):
+        exp = IntegratorSetting.get_var(integrator, 'form_expiration')
+        f = cls()
+        f.user = user
+        f.expiration = int(time.time()) + exp
+        f.integrator = integrator
+        f.package    = package
+        f.template = template
+        f.token = hashlib.md5("%s%s%s" % (user.user_id, f.expiration, integrator.name)).hexdigest()
+        f.save()
+        return f
+        
+    @classmethod    
+    def get_template(cls, user, token):
+        try:
+            f = cls.objects.get(user=user, token=token)
+            if f.expiration >= int(time.time()):
+                return f.template
+            else:
+                return None
+                return None
+        except ObjectDoesNotExist:
+            return None
+        
+    

@@ -46,4 +46,8 @@ class PaymentHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(models.Package)
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ['package_id', 'duration', 'amount', 'integrator']
+    list_display = ['package_id', 'duration', 'amount', 'integrator', 'enabled']
+    
+@admin.register(models.Form)
+class FormAdmin(admin.ModelAdmin):
+    list_display = ['token', 'user', 'integrator', 'package', 'expiration']
