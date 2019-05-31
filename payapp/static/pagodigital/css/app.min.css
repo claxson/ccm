@@ -7,17 +7,6 @@ h1 {
   font-size: 1.1875rem;
   font-weight: 700; }
 
-.btn-pd {
-  background-color: #9f1319;
-  color: #fff;
-  font-size: 1.1764rem;
-  height: 60px;
-  text-transform: uppercase;
-  transition: 1s; }
-  .btn-pd:hover {
-    background-color: #ba2127;
-    color: #fff; }
-
 select {
   -moz-appearance: none;
   -webkit-appearance: none;
@@ -28,6 +17,23 @@ select {
 option:checked {
   box-shadow: none;
   border: 1px solid #e0e0e0; }
+
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -moz-appearance: none;
+  -webkit-appearance: none;
+  margin: 0; }
+
+.btn-pd {
+  background-color: #9f1319;
+  color: #fff;
+  font-size: 1.1764rem;
+  height: 60px;
+  text-transform: uppercase;
+  transition: 1s; }
+  .btn-pd:hover {
+    background-color: #ba2127;
+    color: #fff; }
 
 .pd-control {
   border-radius: 3px;
@@ -45,7 +51,7 @@ option:checked {
     font-weight: 300;
     font-size: 1rem; }
 
-.pd-control-completed {
+.pd-control-valid {
   box-shadow: none;
   border: 1px solid #e0e0e0; }
 
@@ -53,7 +59,7 @@ option:checked {
   border-bottom: 1px solid #fff !important; }
 
 .pd-control-invalid {
-  background-color: #fce9ef;
+  background-color: #fce9ef !important;
   border: solid 1px #dc004a;
   box-shadow: 0 2px 9px -2px rgba(159, 19, 25, 0.27);
   color: #c4718d; }
@@ -104,4 +110,7 @@ option:checked {
 
 .tt-suggestion {
   padding: 20px 22px; }
+
+.twitter-typeahead {
+  width: 100%; }
 
