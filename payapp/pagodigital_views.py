@@ -80,7 +80,7 @@ def payment_pagodigital(request):
     # Vars
     integrator = Integrator.get('pagodigital')
     baseurl    = Setting.get_var('baseurl')
-    template   = 'pagodigital.html'
+    template   = 'pagodigital/pagodigital.html'
 
     # Verifico ApiKey
     cap = __check_apikey(request)
@@ -303,7 +303,7 @@ def form_pagodigital(request):
             body = { 'status': 'error', 'message': message }
             return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
         
-        context = {'country': user.country.code}
+        context = {'country': user.country.code, 'email': user.email}
         print template
         print context
         return render(request, template, context)
