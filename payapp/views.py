@@ -37,6 +37,7 @@ from paymentez import DeleteCard
 
 from misc import paymentez_translator
 from misc import paymentez_intercom_metadata
+from misc import post_to_promiscuus
 
 from intercom import Intercom
 
@@ -338,11 +339,15 @@ def create_payment(request):
                             ph.save()
                     except Exception as e:
                         ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
-                        ph.save()
+                        ph.save()                
+                
+                # POST to promiscuus
+                resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+                if resp_promiscuus['status'] == 'error':
+                    ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                    ph.save()
 
                 body = {'status': rep_status, 'message': '', 'user_message': pr['user_message']}
-                print "################### Subscripcion OK ###############"
-                print body
                 return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
 
             else:
@@ -352,6 +357,13 @@ def create_payment(request):
                 up.reply_error(message)
                 ph.error('', content)
                 user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
+
+                # POST to promiscuus
+                resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+                if resp_promiscuus['status'] == 'error':
+                    ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                    ph.save()
+
                 body = {'status': 'error', 'message': message, 'user_message': user_message}
                 return HttpResponse(json.dumps(body), content_type="application/json", status=http_UNPROCESSABLE_ENTITY)
 
@@ -519,6 +531,12 @@ def cancel_payment(request):
         up.message = "Intercom error: %s" % str(e)
         up.save()
     
+    # POST to promiscuus
+    resp_promiscuus = post_to_promiscuus(up, 'cancel')
+    if resp_promiscuus['status'] == 'error':
+        up.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
+        up.save()
+
     return HttpResponse(status=http_POST_OK)
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -629,7 +647,7 @@ def change_user_email(request):
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                                        Eliminar tarjeta no activa                                          #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# JSON - Mandatorios: user_id, email                                                                         #
+# JSON - Mandatorios: token                                                                                  #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @require_http_methods(["GET"])
 def delete_card(request, token):
@@ -678,6 +696,12 @@ def delete_card(request, token):
                                                                content['error']['description'])
             body = {'status': 'error', 'message': message}
             return HttpResponse(json.dumps(body), content_type="application/json", status=http_UNPROCESSABLE_ENTITY)
+    
+    else:
+        card.sdelete()
+        message = "card with token %s deleted succesfully" % str(card.token)
+        body = {'status': 'success', 'message': message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
 
 
     

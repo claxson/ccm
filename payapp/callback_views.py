@@ -32,6 +32,7 @@ from time import time
 
 from misc import paymentez_translator
 from misc import paymentez_intercom_metadata
+from misc import post_to_promiscuus
 
 from intercom import Intercom
 
@@ -77,7 +78,7 @@ def __validate_stoken(data, country):
     app_key  = IntegratorSetting.get_var(integrator, 'paymentez_server_app_key')
 
     string = "%s_%s_%s_%s" % (tx_id, app_code, user_id, app_key)
-
+    
     if stoken.lower() == hashlib.md5(string).hexdigest():
         return True
     else:
@@ -142,9 +143,29 @@ def __callback_paymentez_proc(data, country):
                 ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
                 ph.save()
 
+        # Verico si es primer pago o rebill        
+        if PaymentHistory.objects.filter(user_payment=ph.user_payment).count() == 1:
+            promiscuus_event = 'payment_commit'            
+        else:
+            promiscuus_event = 'rebill'
+
+        # POST to promiscuus
+        if ph.user_payment.status == 'AC':
+            resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
+            if resp_promiscuus['status'] == 'error':
+                ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                ph.save()
+        elif ph.user_payment.status == 'CA':
+            resp_promiscuus = post_to_promiscuus(ph.user_payment, 'cancel')
+            if resp_promiscuus['status'] == 'error':
+                ph.user_payment.message = "%s - Promiscuus error: %s" % (ph.user_payment.message, resp_promiscuus['message'])
+                ph.user_payment.save()
+
     else:
         body = {"status": "error", "message": "ignoring callback: PH status %s" % ph.status}
         return HttpResponse(json.dumps(body), content_type="application/json", status=200)
+
+    
 
     body = {'status': 'success', 'message': ''}
     return HttpResponse(json.dumps(body), content_type="application/json", status=200)
@@ -232,6 +253,12 @@ def callback_commercegate(request):
             ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
             ph.save()
         print 'CommerceGate callback: Sale'
+
+        # POST to promiscuus
+        resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+        if resp_promiscuus['status'] == 'error':
+            ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+            ph.save()
         
     elif transaction_type == 'REBILL':
         up = UserPayment.objects.get(user=user, status='AC')
@@ -263,6 +290,12 @@ def callback_commercegate(request):
             ph.save()
 
         print 'CommerceGate callback: Rebill'
+
+        # POST to promiscuus
+        resp_promiscuus = post_to_promiscuus(ph, 'rebill')
+        if resp_promiscuus['status'] == 'error':
+            ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+            ph.save()
         
     elif transaction_type == 'CANCELMEMBERSHIPNOTIFY':
         up = UserPayment.objects.get(user=user, status='AC')
@@ -279,6 +312,12 @@ def callback_commercegate(request):
             up.message = "Intercom error: %s" % str(e)
             up.save()
 
+        # POST to promiscuus
+        resp_promiscuus = post_to_promiscuus(up, 'cancel')
+        if resp_promiscuus['status'] == 'error':
+            up.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
+            up.save()    
+
         print 'CommerceGate callback: Cancel membership notify'
     elif transaction_type == 'CANCELMEMBERSHIP':
         user.expire()
@@ -290,7 +329,5 @@ def callback_commercegate(request):
             ph.cancel(transaction_id, 'refund')
         except:
             print 'Refund: Transaction ID %s not found' %transaction_reference_id
-
-    print xml
 
     return HttpResponse('SUCCESS', content_type='text/plain', status='200')

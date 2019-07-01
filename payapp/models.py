@@ -623,29 +623,47 @@ class Package(models.Model):
         return self.package_id
 
 class Form(models.Model):
-    user       = models.ForeignKey(User)
-    token      = models.CharField(max_length=32)
-    expiration = models.IntegerField()
-    template   = models.CharField(max_length=64)
-    integrator = models.ForeignKey(Integrator)
-    package    = models.ForeignKey(Package)
+    TYPE = (('AC', 'Add Card'),
+            ('UP', 'User Payment'))
+            
+    user         = models.ForeignKey(User)
+    user_payment = models.ForeignKey(UserPayment)
+    token        = models.CharField(max_length=32)
+    expiration   = models.IntegerField()
+    template     = models.CharField(max_length=64)
+    integrator   = models.ForeignKey(Integrator)
+    package      = models.ForeignKey(Package, blank=True, null=True)
+    form_type    = models.CharField(max_length=2, choices=TYPE, default='UP')
     
     def __unicode__(self):
         return self.token
         
     @classmethod
-    def create(cls, user, integrator, package, template):
+    def create(cls, user, user_payment, integrator, template, form_type='UP', package=None):
         exp = IntegratorSetting.get_var(integrator, 'form_expiration')
         f = cls()
         f.user = user
+        f.user_payment = user_payment
         f.expiration = int(time.time()) + exp
         f.integrator = integrator
         f.package    = package
+        f.form_type  = form_type
         f.template = template
         f.token = hashlib.md5("%s%s%s" % (user.user_id, f.expiration, integrator.name)).hexdigest()
         f.save()
         return f
-        
+    
+    @classmethod
+    def get(cls, user, token):
+        try:
+            f = cls.objects.get(user=user, token=token)
+            if f.expiration >= int(time.time()):
+                return f
+            else:
+                return None
+        except ObjectDoesNotExist:
+            return None
+    
     @classmethod    
     def get_template(cls, user, token):
         try:
@@ -653,7 +671,6 @@ class Form(models.Model):
             if f.expiration >= int(time.time()):
                 return f.template
             else:
-                return None
                 return None
         except ObjectDoesNotExist:
             return None

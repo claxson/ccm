@@ -7,6 +7,7 @@ from django.shortcuts import render
 
 import json
 from time import time
+from time import mktime
 from urllib import urlencode
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from models import User
 from models import UserPayment
 from models import PaymentHistory
 from models import Integrator
+from models import IntegratorSetting
 from models import Country 
 from models import Package
 from models import Setting
@@ -21,6 +23,16 @@ from models import Form
 from models import Card
 
 from misc import post_to_intercom
+from misc import pagodigital_translator
+from misc import pagodigital_intercom_metadata
+from misc import unicodetoascii
+from misc import post_to_promiscuus
+
+from pagodigital import PagoDigitalGateway
+from pagodigital import PagoDigitalCard
+from pagodigital import PagoDigitalTx
+
+from payapp.intercom import Intercom
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
@@ -117,6 +129,7 @@ def payment_pagodigital(request):
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
     
+    # Obtengo el packete en base a la duracion
     package = Package.get(data['recurrence'], integrator)
     if package is None:
         message = "package not found with that duration"
@@ -140,14 +153,14 @@ def payment_pagodigital(request):
         up.discount(data['discount'], data['disc_counter'])
 
     # Creo el form
-    form = Form.create(user, integrator, package, template)
+    form = Form.create(user, up, integrator, template, 'UP', package)
     if form is None:
         message = "form could not be created"
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)        
         
     iframe_params = { 'user_id': user.user_id, 'token': form.token }
-    iframe_url    = '%sapi/v1/pagodigital/form/?%s' % (baseurl, urlencode(iframe_params))
+    iframe_url    = '%sapi/v1/pagodigital/userpayment/form/?%s' % (baseurl, urlencode(iframe_params))
     body = { 'status': 'success', 'value': { 'url': iframe_url } }
 
     return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
@@ -155,47 +168,76 @@ def payment_pagodigital(request):
     
     
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#                                Devuelve JSON con URL de formulario de pago                                 #
+#                                Crea el UserPayment y realiza el addcard y pago                             #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # ---------- POST ---------                                                                                  #
-# Parametros (POST JSON):                                                              # 
+# Parametros (POST JSON):                                                                                    # 
 # ---------- GET ----------                                                                                  #
 # Parametros: user_id, token                                                                                 #
 # Retorno: url                                                                                               #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
-
 @require_http_methods(["GET", "POST"])
-def form_pagodigital(request):
+def userpayment_form_pagodigital(request):
+    ########  Metodo POST  ########
     if request.method == 'POST':  
         data = request.POST
+        template = 'pagodigital/redirect.html'
+
         # Verifico las key mandatorias
         keys = [ 'name', 'phone', 'address', 'id_card', 'email', 'city', 
-                 'state', 'cc_number', 'cc_exp_year', 'cc_exp_year', 
-                 'cc_cvv', 'cc_fr_number', 'cc_fr_name', 'token', 'user_id' ]
-        json_loader = __validate_json(request.POST, keys)
+                 'state', 'cc_number', 'cc_exp_month', 'cc_exp_year', 
+                 'cc_cvv', 'cc_fr_number', 'cc_fr_name', 'user_id' , 'token']
+                
+        json_loader = __validate_json(data, keys)
         if json_loader['status'] == 'error':
             return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
         
+        # Obtengo el usuario y el form vinculado al token
         user = User.get(data['user_id'])
         form = Form.get(user, data['token'])
         if form is None:
             message = 'form not available'
             body = { 'status': 'error', 'message': message }
             return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
-        
+
         # Verifico que no tenga un User Payment activo
-        up = UserPayment.get_enabled(user)
-        if up is not None:
-            if up.status != 'PE':
-                message = 'enabled user payment already exists'
-                body = { 'status': 'error', 'message': message }
-                return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+        active_up = UserPayment.get_active(user)
+        if active_up is not None:
+            message = 'enabled user payment already exists'
+            body = { 'status': 'error', 'message': message }
+            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+        
+        up = form.user_payment
+        
+        # Obtengo settings del integrator
+        api_key    = IntegratorSetting.get_var(form.integrator, 'api_key')
+        api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
+        success_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_success')
+        failed_url  = IntegratorSetting.get_var(form.integrator, 'redirect_url_failed')
         
         # Realizar add card y obtener token
-        # ---- Hace librería para pago digital ----
-        card_token = "123455666"
+        pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
+        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret)
+        pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
+                                  data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
+                                  data['phone'], data['city'], data['state'])
+        try:
+            ret, content = pd_gw.doPost(pd_card.to_dict())
+            if not ret:
+                message = "%s - %s" % (content['STATUS_MESSAGE'], content['MESSAGE'])
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+            if content['CODIGO_RESPUESTA'] != '00':
+                message = "ADD CARD ERROR - code: %s - message: %s" % (content['CODIGO_RESPUESTA'], content['RESPUESTA'])
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+        except Exception as e:
+            message = 'add card error: %s' % e
+            up.reply_error(message)
+            context = {'redirect_url': failed_url}
+            return render(request, template, context)
         
         # Deshabilito cualquier tarjeta existente
         cards = Card.objects.filter(user=user, enabled=True)
@@ -203,11 +245,12 @@ def form_pagodigital(request):
             card.disable()
         
         # Creo la tarjeta o la obtengo si ya existe
-        card = Card.get_by_token(up.user, card_token)
-        card.enable()
-        if card is None:
+        card = Card.get_by_token(up.user, content['TOKEN'])
+        if card is not None:
+            card.enable()
+        else:
             card_exp = "%s/%s" % (data['cc_exp_month'], data['cc_exp_year'][-2:])
-            card = Card.create_with_token(user, card_token, data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
+            card = Card.create_with_token(user, content['TOKEN'], data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
         
         # Aplico descuento si corresponde
         disc_flag = False
@@ -225,25 +268,26 @@ def form_pagodigital(request):
 
         if ph.amount > 0:
             # Realizar pago
-            pd_endpoint = IntegratorSetting.get_var(form.integrator, 'endpoint')
-            pd_user     = IntegratorSetting.get_var(form.integrator, 'user')
-            pd_password = IntegratorSetting.get_var(form.integrator, 'password')
+            pd_tx_endpoint = IntegratorSetting.get_var(form.integrator, 'process_tx_endpoint')
+            pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret)
             try:
-                # ---- Hacer librería para pago digital ----
-                pass
+                pd_tx = PagoDigitalTx(int(ph.amount), card.token)
+                ret, content = pd_gw.doPost(pd_tx.to_dict())
+                print ret
+                print content
             except Exception as e:
-                # ---------- Analizar que pasa ante un error en el pago ---------------
-                # Pongo el pago en Waiting Callback
-                ph.status = "W"
-                ph.save()
+                message = 'Payment error: %s' % e
+                up.reply_error(message)
+                ph.error('', message)
                 return False
         else:
             ret = True
-            content = {'transaction': {'status_detail':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}}       
+            content = {'CODIGO_RESPUESTA':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}
      
         if ret:
             # Obtengo los valores segun la respuesta de Pagodigital
             pr = pagodigital_translator(content)
+           
             # Seteo los valores de la UserPayment
             up.status  = pr["up_status"]
             up.message = pr["up_message"]
@@ -258,11 +302,10 @@ def form_pagodigital(request):
                     up.disc_counter = up.disc_counter - 1
             else:
                 up.channel = 'R'
-            up.save()
-            
-            
+            up.save()            
 
             # Seteo los valores del PaymentHistory
+            print pr
             ph.status     = pr["ph_status"]
             ph.gateway_id = pr["ph_gatewayid"]
             ph.message    = pr["ph_message"]
@@ -278,36 +321,196 @@ def form_pagodigital(request):
                 
             # Posteo en intercomo si es requerido
             if pr["intercom"]["action"]:
-                ph = post_to_intercom(ph, pr["intercom"]["event"], paymentez_intercom_metadata(content['transaction']))               
+                content['amount'] = ph.amount
+                if user.expiration is not None:
+                    content['expire_at'] = mktime(user.expiration.timetuple())
+                post_to_intercom(ph, pr["intercom"]["event"], pagodigital_intercom_metadata(content))               
 
-            body = {'status': rep_status, 'message': '', 'user_message': pr['user_message']}
-            print "################### Subscripcion OK ###############"
-            print body
-            return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
+            # POST to promiscuus
+            resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+            if resp_promiscuus['status'] == 'error':
+                ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                ph.save()
+
+            context = {'redirect_url': success_url}
+            return render(request, template, context)
         
         else:
-            user_message = "Ocurrió un error con el pago, por favor consulte con el banco emisor de la tarjeta y reintente nuevamente más tarde"
-            message = "could not create user payment: (Unknown Integrator: %s)" % str(form.integrator.name)
-            body = {'status': 'error', 'message': message, 'user_message': user_message}
-            return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)   
+            message = "could not create user payment"
+            up.reply_error(message)
+            ph.error('', message)
+
+            # POST to promiscuus
+            resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+            if resp_promiscuus['status'] == 'error':
+                ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                ph.save()
+
+            context = {'redirect_url': failed_url}
+            return render(request, template, context)
+
         
-        
-        
-        
+    ########  Metodo GET  ########    
     elif request.method == 'GET':
-        print request.GET
         user = User.get(request.GET['user_id'])
         template = Form.get_template(user, request.GET['token'])
+        baseurl    = Setting.get_var('baseurl')
+
         if template is None:
             message = 'form not available'
             body = { 'status': 'error', 'message': message }
             return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
         
-        context = {'country': user.country.code, 'email': user.email}
-        print template
-        print context
+        context = {'country': user.country.code, 'email': user.email, 'baseurl': baseurl}
         return render(request, template, context)
         
             
             
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#                     Devuelve JSON con URL de formular para agregar tarjeta                                 #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Parametros: user_id                                                                                        #
+# Retorno: url                                                                                               #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@require_http_methods(["POST"])
+def add_card_pagodigital(request):
+    # Vars
+    integrator = Integrator.get('pagodigital')
+    baseurl    = Setting.get_var('baseurl')
+    template   = 'pagodigital/pagodigital.html'
+
+    # Verifico ApiKey
+    cap = __check_apikey(request)
+    if cap['status'] == 'error':
+        return HttpResponse(status=http_UNAUTHORIZED)
+    
+    # Cargo el JSON
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        message = 'error decoding json'
+        body = { 'status': 'error', 'message': message }
+        return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+
+    # Verifico las key mandatorias
+    keys = [ 'user_id' ]
+    json_loader = __validate_json(data, keys)
+
+    if json_loader['status'] == 'error':
+        return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
+
+    # Verifico si el usuario existe y sino devuelvo error
+    try:
+        user       = User.objects.get(user_id=data['user_id'])
+    except ObjectDoesNotExist:
+        message = 'user does not exist'
+        body = { 'status': 'error', 'message': message }
+        return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+
+    # Obtengo el User Payment activo sino devuelvo error
+    up = UserPayment.get_active(user)
+    if up is None:
+        message = 'enabled user payment does not exist'
+        body = { 'status': 'error', 'message': message }
+        return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+    
+    # Creo el form
+    form = Form.create(user, up, integrator, template, 'AC')
+    if form is None:
+        message = "form could not be created"
+        body = { 'status': 'error', 'message': message }
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)        
         
+    iframe_params = { 'user_id': user.user_id, 'token': form.token }
+    iframe_url    = '%sapi/v1/pagodigital/addcard/form/?%s' % (baseurl, urlencode(iframe_params))
+    body = { 'status': 'success', 'value': { 'url': iframe_url } }
+
+    return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#                                               Form de Pago                                                 #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ---------- POST ---------                                                                                  #
+# Parametros (POST JSON):                                                                                    # 
+# ---------- GET ----------                                                                                  #
+# Parametros: user_id, token                                                                                 #
+# Retorno: redirect on error or success                                                                      #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@require_http_methods(["GET", "POST"])
+def add_card_form_pagodigital(request):
+    ########  Metodo POST  ########
+    if request.method == 'POST':  
+        data     = request.POST
+        template = 'pagodigital/redirect.html'
+
+        # Verifico las key mandatorias
+        keys = [ 'name', 'phone', 'address', 'id_card', 'email', 'city', 
+                 'state', 'cc_number', 'cc_exp_month', 'cc_exp_year', 
+                 'cc_cvv', 'cc_fr_number', 'cc_fr_name', 'user_id' , 'token']
+                
+        json_loader = __validate_json(data, keys)
+        if json_loader['status'] == 'error':
+            return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
+        
+        # Obtengo el usuario y el form vinculado al token
+        user = User.get(data['user_id'])
+        form = Form.get(user, data['token'])
+        if form is None:
+            message = 'form not available'
+            body = { 'status': 'error', 'message': message }
+            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+
+        # Obtengo settings del integrator
+        api_key    = IntegratorSetting.get_var(form.integrator, 'api_key')
+        api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
+        redirect_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_add_card')
+        
+        # Realizar add card y obtener token
+        pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
+        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret)
+        pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
+                                  data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
+                                  data['phone'], data['city'], data['state'])
+        try:
+            ret, content = pd_gw.doPost(pd_card.to_dict())
+            if not ret:
+                context = {'redirect_url': redirect_url}
+                return render(request, template, context)
+            if content['CODIGO_RESPUESTA'] != '00':
+                context = {'redirect_url': redirect_url}
+                return render(request, template, context)
+        except Exception as e:
+            context = {'redirect_url': redirect_url}
+            return render(request, template, context)
+        
+        # Deshabilito cualquier tarjeta existente
+        cards = Card.objects.filter(user=user, enabled=True)
+        for card in cards:
+            card.disable()
+        
+        # Creo la tarjeta o la obtengo si ya existe
+        card = Card.get_by_token(user, content['TOKEN'])
+        if card is not None:
+            card.enable()
+        else:
+            card_exp = "%s/%s" % (data['cc_exp_month'], data['cc_exp_year'][-2:])
+            card = Card.create_with_token(user, content['TOKEN'], data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
+
+        context = {'redirect_url': redirect_url}
+        return render(request, template, context)
+
+
+        ########  Metodo GET  ########    
+    elif request.method == 'GET':
+        user = User.get(request.GET['user_id'])
+        template = Form.get_template(user, request.GET['token'])
+        baseurl  = Setting.get_var('baseurl')
+
+        if template is None:
+            message = 'form not available'
+            body = { 'status': 'error', 'message': message }
+            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+        
+        context = {'country': user.country.code, 'email': user.email, 'baseurl': baseurl}
+        return render(request, template, context)

@@ -4,13 +4,13 @@ from django.contrib import admin
 from payapp.views import create_payment, payment_discount, cancel_payment, change_token_card, user_status, get_cards, get_enabled_card, change_user_email, refund, delete_card
 from payapp.frontend_api import get_user, get_all_users, get_user_payment, get_all_payments, get_payment_history, get_all_payment_history, expireuser, activateuser, deleteuserpayment, getuserpayment, manual_payment, filter_countries, filter_status_recurrence, filter_status_history, filter_recurrence, filter_boolean
 
-from payapp.commercegate_views import payment_commercegate, cancel_commercegate
+from payapp.commercegate_views import payment_commercegate, cancel_commercegate, error_commercegate
 
 from payapp.frontend_views import login_view, logout_view, dashboard, users, userpayments, paymenthistory, commercegate
 
 from payapp.callback_views import callback_paymentez, callback_commercegate
 
-from payapp.pagodigital_views import payment_pagodigital, form_pagodigital
+from payapp.pagodigital_views import payment_pagodigital, userpayment_form_pagodigital, add_card_pagodigital, add_card_form_pagodigital
 
 urlpatterns = [
 
@@ -31,11 +31,13 @@ urlpatterns = [
     url(r'^api/v1/callback/commercegate', callback_commercegate),
     url(r'^api/v1/commercegate/get/form', payment_commercegate),
     url(r'^api/v1/commercegate/set/cancel', cancel_commercegate),
+    url(r'^commercegate/error/(?P<user_payment_id>[\w\-]+)', error_commercegate),
     
     # Pago Digital
     url(r'^api/v1/pagodigital/set/payment', payment_pagodigital),
-    url(r'^api/v1/pagodigital/form', form_pagodigital),
-    
+    url(r'^api/v1/pagodigital/userpayment/form', userpayment_form_pagodigital),
+    url(r'^api/v1/pagodigital/set/addcard', add_card_pagodigital),
+    url(r'^api/v1/pagodigital/addcard/form', add_card_form_pagodigital),
 
     url(r'^api/v1/api/users/(?P<user_id>[\w\-]+)', get_user),
     url(r'^api/v1/api/users', get_all_users),

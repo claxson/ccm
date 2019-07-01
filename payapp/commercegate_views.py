@@ -3,6 +3,7 @@
 from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import ObjectDoesNotExist
+from django.shortcuts import redirect
 
 from urllib import urlencode
 from httplib2 import Http
@@ -12,10 +13,12 @@ from time import time
 from datetime import date
 from datetime import datetime
 
+from misc import post_to_promiscuus
+
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # App Models
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-from models import User, UserPayment, PaymentHistory, Currency, Integrator, Country, IntegratorSetting, Package
+from models import User, UserPayment, PaymentHistory, Currency, Integrator, Country, IntegratorSetting, Package, Setting
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
@@ -110,23 +113,18 @@ def payment_commercegate(request):
     country = Country.get(integrator.country)
 
     # Si tiene algun UserPayment habilitado devuelvo un error
-    try:
-        up = UserPayment.objects.get(user=user, enabled=True)
-        if up.status == 'AC':
-            message = 'enabled user payment already exists'
-            body = { 'status': 'error', 'message': message }
-
-            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
-    except ObjectDoesNotExist:
+    up = UserPayment.get_active(user)
+    if up is not None:
+        message = 'enabled user payment already exists'
+        body = { 'status': 'error', 'message': message }
+        return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+    else:    
         up = UserPayment.create(user, package.duration, package.amount, country.currency)
 
     payment_id = "PH_%s_%d" % (user.user_id, int(time()))
 
-    # Si existe PaymentHistory lo uso sino lo creo
-    try:
-        ph = PaymentHistory.objects.get(user_payment=up, status='P')
-    except ObjectDoesNotExist:
-        ph = PaymentHistory.create(up, payment_id, integrator)
+    # Creo el PaymentHistory
+    ph = PaymentHistory.create(up, payment_id, integrator)
 
     params = { 'cid': customer_id, 'wid': website_id, 'packid': package.package_id, 'username': data['user_id'], 'email': data['email']  }
     url = '%s?%s' % (endpoint_token, urlencode(params))
@@ -145,10 +143,10 @@ def payment_commercegate(request):
         iframe_params['successUrl'] = redirect_url_success
 
     if redirect_url_failed:
-        iframe_params['failedUrl'] = redirect_url_failed
-
+        #iframe_params['failedUrl'] = redirect_url_failed
+        iframe_params['failedUrl'] = "%s://%s/commercegate/error/%s" % (request.scheme, request.META['HTTP_HOST'], up.user_payment_id)
+    
     iframe_url = '%s?%s' % (endpoint, urlencode(iframe_params))
-
     body = { 'status': 'success', 'value': { 'url': iframe_url } }
 
     return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
@@ -209,3 +207,36 @@ def cancel_commercegate(request):
 
     body = { 'status': 'success' }
     return HttpResponse(json.dumps(body), content_type='application/json', status=http_POST_OK)
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#                                Error en pago                                                               #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Parametros: user_payment_id                                                                                #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@require_http_methods(["GET"])
+def error_commercegate(request, user_payment_id):
+    up = UserPayment.get_by_id(user_payment_id)
+    print request
+    if up is not None:
+        if 'errMsg' in request.GET and 'errNum' in request.GET:
+            message = "code: %s - message: %s" % (request.GET['errNum'], request.GET['errMsg'])
+        else:
+            message = ''
+        up.reply_error(message)
+        ph = PaymentHistory.get(up, 'P')
+        if ph is not None:
+            ph.reject('', message)
+
+            # POST to promiscuus
+            resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
+            print resp_promiscuus
+            if resp_promiscuus['status'] == 'error':
+                ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+                ph.save()
+
+    return redirect(redirect_url_failed)
+
+
+
+

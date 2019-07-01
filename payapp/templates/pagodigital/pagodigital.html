@@ -41,10 +41,10 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-6">
+          <div class="form-group col-xs-12 col-md-6">
             <input type="text" class="form-control pd-control" name="cc_expiration" id="cc_expiration" placeholder="Fecha de Expiración">
           </div>
-          <div class="form-group col-6">
+          <div class="form-group col-xs-12 col-md-6">
             <input type="tel" class="form-control pd-control" name="cc_cvv" id="cc_cvv" placeholder="Código de Seguridad">
           </div>
         </div>
@@ -54,12 +54,12 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-6">
+          <div class="form-group col-xs-6 col-md-6">
             <select class="form-control pd-control" name="state" id="state">
               <option value="" disabled selected>Departamento</option>
             </select>
           </div>
-          <div class="form-group col-6">
+          <div class="form-group col-xs-12 col-md-6">
             <input type="text" class="form-control pd-control" name="city" id="city" placeholder="Ciudad" readonly>
           </div>
         </div>
@@ -71,8 +71,8 @@
         <div class="form-row">
           <div class="form-group col">
             <input type="tel" class="form-control pd-control" name="phone" id="phone" placeholder="Teléfono">
-            <input type="hidden" id="user_id" name="user_id" value="{{ user_id }}">
-            <input type="hidden" id="token" name="token" value="{{ token }}">
+            <input type="hidden" id="user_id" name="user_id" value="">
+            <input type="hidden" id="token" name="token" value="">
             <input type="hidden" id="cc_exp_month" name="cc_exp_month" value="">
             <input type="hidden" id="cc_exp_year" name="cc_exp_year" value="">
             <input type="hidden" id="cc_fr_number" name="cc_fr_number" value="">
@@ -101,6 +101,7 @@
     <script src="/static/pagodigital/js/vendor/typeahead.jquery.min.js"></script>
     <script src="/static/pagodigital/js/vendor/bloodhound.min.js"></script>
     <script src="/static/pagodigital/js/vendor/validate.min.js"></script>
+    <script>window.base_url="{{ baseurl }}";</script>
     <script src="/static/pagodigital/js/app.min.js"></script>
   </body>
 </html>
