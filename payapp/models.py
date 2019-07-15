@@ -273,6 +273,7 @@ class UserPayment(models.Model):
     retries           = models.IntegerField(default=0, help_text='Payment retries')
     internal          = models.BooleanField(default=True)
     enabled           = models.BooleanField(default=True)
+    enabled_card      = models.BooleanField(default=False)
     creation_date     = models.DateTimeField(auto_now_add=True)
     modification_date = models.DateTimeField(auto_now=True, blank=True, null=True)
 
@@ -298,6 +299,7 @@ class UserPayment(models.Model):
         up.disc_counter = int(disc_counter)
         up.internal     = internal
         up.enabled      = True
+        up.enabled_card = False
         up.save()
         return up
         
@@ -434,6 +436,11 @@ class UserPayment(models.Model):
         
     def add_retry(self):
         self.retries = self.retries + 1
+        self.save()
+        return self
+
+    def enable_card(self):
+        self.enable_card = True
         self.save()
         return self
 
@@ -675,4 +682,7 @@ class Form(models.Model):
         except ObjectDoesNotExist:
             return None
         
-    
+    def extend(self, seconds):
+        self.expiration = self.expiration + seconds
+        self.save()
+        return self

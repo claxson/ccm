@@ -158,7 +158,6 @@ def create_payment(request):
         user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
         message = "country %s does not exist" % data['country']
         body = {'status': 'error', 'message': message, 'user_message': user_message}
-        print message
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
 
     # Verifico que el integrador exista
@@ -322,14 +321,11 @@ def create_payment(request):
                 if pr["user_expire"]:
                     user.expire()
 
-                print "Post en intercom"
                 if pr["intercom"]["action"]:
                     ep    = Setting.get_var('intercom_endpoint')
                     token = Setting.get_var('intercom_token')
                     if user.expiration is not None:
                         content['transaction']['expire_at'] = mktime(user.expiration.timetuple())
-                    print "CONTENT INTERCOM"
-                    print content
                     try:
                         intercom = Intercom(ep, token)
                         reply = intercom.submitEvent(up.user.user_id, up.user.email, pr["intercom"]["event"],
@@ -435,9 +431,8 @@ def payment_discount(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
     # Obtengo el UserPayment y si no existe devulvo error
-    try:
-        up = UserPayment.objects.get(user=user, enabled=True)
-    except ObjectDoesNotExist:
+    up = UserPayment.get_active(user=user)
+    if up is None:
         message = "user_id %s has not enabled recurring payment" % user_id
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
@@ -496,9 +491,8 @@ def cancel_payment(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
         
     # Obtengo el UserPayment activo y si no existe devulvo error
-    try:
-        up = UserPayment.objects.get(user=user, enabled=True)
-    except ObjectDoesNotExist:
+    up = UserPayment.get_active(user=user)
+    if up is None:
         message = "user_id %s has not enabled recurring payment" % data['user_id']
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
@@ -735,10 +729,10 @@ def user_status(request, user_id):
 
     # Obtengo el UserPayment activo y si no existe devuelvo solo fecha de expiracion
     try:
-        up = UserPayment.objects.get(user=user, enabled=True)
+        up = UserPayment.objects.get(user=user, status='AC')
     except ObjectDoesNotExist:
         ret['status']  = 'E'
-        ret['message'] = 'UserPayement enabled not found'
+        ret['message'] = 'Enabled UserPayement not found'
         body = {'status': 'success', 'value': ret}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
     

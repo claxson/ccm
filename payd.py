@@ -134,7 +134,6 @@ def payd_main():
         logging.info("payd_main(): Getting active UserPayemnts to pay...")
         payments = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lte=timezone.now(), internal=True)
         ips = Setting.get_var("payment_slot")
-        print payments
         for up in payments:
             if ips > 0:
                 # Cambio a Pending.

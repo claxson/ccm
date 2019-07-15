@@ -7,6 +7,7 @@ from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import *
 from django.utils import timezone
+from django.core.exceptions import ObjectDoesNotExist
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # App Models
@@ -218,7 +219,12 @@ def callback_commercegate(request):
     transaction_type = xml_data['TransactionType']
     transaction_id = xml_data['TransactionID']
     user_id = xml_data['UserID']
-    user = User.objects.get(user_id=user_id)
+
+    try:
+        user = User.objects.get(user_id=user_id)
+    except ObjectDoesNotExist:
+        return HttpResponse('UserId does not exist', content_type='text/plain', status='200')
+    
 
     if 'TransactionReferenceID' in xml_data:
         transaction_reference_id = xml_data['TransactionReferenceID']

@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import render
+from django.views.decorators.clickjacking import xframe_options_exempt
 
 import json
 from time import time
@@ -46,6 +47,9 @@ http_NOT_ALLOWED          = 405
 http_UNAUTHORIZED         = 401
 http_PAYMENT_REQUIRED     = 402
 http_INTERNAL_ERROR       = 500
+
+SUCCESS_CODES = ['000', '002', '003', '004', '005', '006', '007', '008', '009',
+                 '00', '08', '11', '76', '77', '78', '79', '80', '81']
 
 
 def __validate_json(json_data, keys):
@@ -125,9 +129,13 @@ def payment_pagodigital(request):
     # Verifico que no tenga un User Payment activo
     up = UserPayment.get_active(user)
     if up is not None:
-        message = 'enabled user payment already exists'
-        body = { 'status': 'error', 'message': message }
-        return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+        if up.enabled_card:
+            message = 'enabled user payment already exists'
+            body = { 'status': 'error', 'message': message }
+            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+        else:
+            up.status = 'PE'
+            up.save()
     
     # Obtengo el packete en base a la duracion
     package = Package.get(data['recurrence'], integrator)
@@ -135,6 +143,7 @@ def payment_pagodigital(request):
         message = "package not found with that duration"
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+    
         
     # Creo UserPayment
     payday = __payday_calc(data['payment_date'])
@@ -176,6 +185,7 @@ def payment_pagodigital(request):
 # Parametros: user_id, token                                                                                 #
 # Retorno: url                                                                                               #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@xframe_options_exempt
 @require_http_methods(["GET", "POST"])
 def userpayment_form_pagodigital(request):
     ########  Metodo POST  ########
@@ -228,8 +238,14 @@ def userpayment_form_pagodigital(request):
                 up.reply_error(message)
                 context = {'redirect_url': failed_url}
                 return render(request, template, context)
-            if content['CODIGO_RESPUESTA'] != '00':
-                message = "ADD CARD ERROR - code: %s - message: %s" % (content['CODIGO_RESPUESTA'], content['RESPUESTA'])
+            if 'CODIGO_RESPUESTA' in content:
+                if str(content['CODIGO_RESPUESTA']) not in SUCCESS_CODES:
+                    message = "ADD CARD ERROR - code: %s - message: %s" % (content['CODIGO_RESPUESTA'], content['RESPUESTA'])
+                    up.reply_error(message)
+                    context = {'redirect_url': failed_url}
+                    return render(request, template, context)
+            else:
+                message = "ADD CARD ERROR - CODIGO_RESPUESTA not found"
                 up.reply_error(message)
                 context = {'redirect_url': failed_url}
                 return render(request, template, context)
@@ -239,6 +255,9 @@ def userpayment_form_pagodigital(request):
             context = {'redirect_url': failed_url}
             return render(request, template, context)
         
+        # Habilito tarjeta en UP
+        up.enabled_card = True
+
         # Deshabilito cualquier tarjeta existente
         cards = Card.objects.filter(user=user, enabled=True)
         for card in cards:
@@ -305,16 +324,15 @@ def userpayment_form_pagodigital(request):
             up.save()            
 
             # Seteo los valores del PaymentHistory
-            print pr
             ph.status     = pr["ph_status"]
             ph.gateway_id = pr["ph_gatewayid"]
             ph.message    = pr["ph_message"]
             ph.save()
 
             if ph.status == 'A':
-                rep_status = "success"
+                redirect_url = success_url                
             else:
-                rep_status = "error"
+                redirect_url = failed_url
 
             if pr["user_expire"]:
                 user.expire()
@@ -332,7 +350,7 @@ def userpayment_form_pagodigital(request):
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
                 ph.save()
 
-            context = {'redirect_url': success_url}
+            context = {'redirect_url': redirect_url}
             return render(request, template, context)
         
         else:
@@ -429,7 +447,7 @@ def add_card_pagodigital(request):
 
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#                                               Form de Pago                                                 #
+#                                               Form para agregar tarjeta                                    #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # ---------- POST ---------                                                                                  #
 # Parametros (POST JSON):                                                                                    # 
@@ -477,7 +495,11 @@ def add_card_form_pagodigital(request):
             if not ret:
                 context = {'redirect_url': redirect_url}
                 return render(request, template, context)
-            if content['CODIGO_RESPUESTA'] != '00':
+            if 'CODIGO_RESPUESTA' in content:
+                if str(content['CODIGO_RESPUESTA']) not in SUCCESS_CODES:
+                    context = {'redirect_url': redirect_url}
+                    return render(request, template, context)
+            else:
                 context = {'redirect_url': redirect_url}
                 return render(request, template, context)
         except Exception as e:

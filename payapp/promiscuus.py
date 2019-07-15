@@ -45,7 +45,6 @@ class Promiscuus(object):
         if 'user_id' in kwargs:
             data = self.__loader(keys, kwargs)
             data['event'] = 'payment_commit'
-            print data
             return self.post(data)
         else:
             raise Exception('Mandatory field is missing: \"user_id\"')

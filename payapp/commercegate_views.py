@@ -217,7 +217,6 @@ def cancel_commercegate(request):
 @require_http_methods(["GET"])
 def error_commercegate(request, user_payment_id):
     up = UserPayment.get_by_id(user_payment_id)
-    print request
     if up is not None:
         if 'errMsg' in request.GET and 'errNum' in request.GET:
             message = "code: %s - message: %s" % (request.GET['errNum'], request.GET['errMsg'])
@@ -230,7 +229,6 @@ def error_commercegate(request, user_payment_id):
 
             # POST to promiscuus
             resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
-            print resp_promiscuus
             if resp_promiscuus['status'] == 'error':
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
                 ph.save()

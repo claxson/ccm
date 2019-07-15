@@ -46,8 +46,6 @@ class PaymentezGateway(object):
         uri = urlparse.urlparse(self.paymentez_endpoint) 
 
         try:
-            print "HEADER: " + str(header)
-            print "BODY: " + data.to_str()
             response, content = self.h.request(uri.geturl(), method, data.to_str(), header)
         except socket.error as err:
             raise GatewayException(err)
@@ -77,7 +75,6 @@ class PaymentezTx(object):
         if self.vat > 0:
             s['order']['taxable_amount'] = self.taxable_amount
         s['card']  = {'token': self.token}
-        print s
         return s
 
     def to_dict(self):
@@ -93,7 +90,6 @@ class PaymentezRefund(object):
 
     def serialize(self):
         s = {'transaction': {'id': self.id}}
-        print s
         return s
 
     def to_dict(self):
@@ -112,7 +108,6 @@ class DeleteCard(object):
         s = {}
         s['card'] = {'token': self.token}
         s['user'] = {'id': self.user_id}
-        print s
         return s
 
     def to_dict(self):
