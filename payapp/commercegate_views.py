@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import redirect
+from django.shortcuts import render
 
 from urllib import urlencode
 from httplib2 import Http
@@ -217,6 +218,7 @@ def cancel_commercegate(request):
 @require_http_methods(["GET"])
 def error_commercegate(request, user_payment_id):
     up = UserPayment.get_by_id(user_payment_id)
+    template = 'error/paymenterror.html'
     if up is not None:
         if 'errMsg' in request.GET and 'errNum' in request.GET:
             message = "code: %s - message: %s" % (request.GET['errNum'], request.GET['errMsg'])
@@ -233,7 +235,9 @@ def error_commercegate(request, user_payment_id):
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
                 ph.save()
 
-    return redirect(redirect_url_failed)
+    context = {'redirect_url': redirect_url_failed}
+    return render(request, template, context)
+    
 
 
 

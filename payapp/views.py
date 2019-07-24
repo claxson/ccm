@@ -6,6 +6,7 @@
 from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse
 from django.core.exceptions import ObjectDoesNotExist
+from django.shortcuts import render
 
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -889,3 +890,17 @@ def refund(request, payment_id):
         message = "could not create user payment: (Unknown Integrator: %s)" % str(ph.integrator.name)
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#                                Error en pago                                                               #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Parametros: user_payment_id                                                                                #
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@require_http_methods(["GET"])
+def payment_error(request):
+    template = 'error/paymenterror.html'
+    base_url = Setting.get_var('ma_base_url')
+    url = "%sprofile" % base_url
+    context = {'redirect_url': url}
+    return render(request, template, context)

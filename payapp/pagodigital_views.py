@@ -192,7 +192,7 @@ def userpayment_form_pagodigital(request):
     if request.method == 'POST':  
         data = request.POST
         template = 'pagodigital/redirect.html'
-
+        
         # Verifico las key mandatorias
         keys = [ 'name', 'phone', 'address', 'id_card', 'email', 'city', 
                  'state', 'cc_number', 'cc_exp_month', 'cc_exp_year', 
@@ -536,3 +536,5 @@ def add_card_form_pagodigital(request):
         
         context = {'country': user.country.code, 'email': user.email, 'baseurl': baseurl}
         return render(request, template, context)
+
+
