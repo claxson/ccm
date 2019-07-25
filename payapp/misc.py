@@ -153,11 +153,11 @@ def pagodigital_translator(content):
     else:
         code = "-1"
 
-    if code not in PAGODIGITAL["codes"]:
-        code = "-1"
-        
     if str(code) in PAGODIGITAL_SUCCESS_CODES:
         code = '00'
+
+    if code not in PAGODIGITAL["codes"]:
+        code = "-1"
 
     data = PAGODIGITAL["codes"][str(code)]
 
