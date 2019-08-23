@@ -27,6 +27,7 @@ from payapp.paymentez import PaymentezTx
 
 from pagodigital import PagoDigitalGateway
 from pagodigital import PagoDigitalTx
+from pagodigital import PagoDigitalJWTGateway
 
 from payapp.intercom import Intercom
 
@@ -456,12 +457,38 @@ def pagodigital_payment(up, card, logging, manual):
         promiscuus_event = 'rebill'
     
     if ph.amount > 0:
-        # Realizar pago
+        
         # Obtengo settings del integrator
         api_key    = IntegratorSetting.get_var(card.integrator, 'api_key')
         api_secret = IntegratorSetting.get_var(card.integrator, 'api_secret')
         pd_tx_endpoint = IntegratorSetting.get_var(card.integrator, 'process_tx_endpoint')
-        pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret)
+        jwt_endpoint = IntegratorSetting.get_var(card.integrator, 'jwt_endpoint')
+        jwt_user = IntegratorSetting.get_var(card.integrator, 'jwt_user')
+        jwt_pass = IntegratorSetting.get_var(card.integrator, 'jwt_pass')
+
+        # Obtengo el JWT
+        pd_jwt_gw = PagoDigitalJWTGateway(jwt_endpoint, jwt_user, jwt_pass)
+        try:
+            ret, content = pd_jwt_gw.doPost()
+            if not ret:
+                message = 'Payment error: Error getting JWT'
+                up.reply_error(message)
+                ph.error('', message)
+                return False
+            if not 'TOKEN' in content:
+                message = 'Payment error: Error getting JWT. JWT key not found' 
+                up.reply_error(message)
+                ph.error('', message)
+                return False
+            pd_jwt = content['TOKEN']
+        except Exception as e:
+            message = 'Payment error: Error getting JWT: %s' % e
+            up.reply_error(message)
+            ph.error('', message)
+            return False
+
+        # Realizar pago
+        pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret, pd_jwt)
         try:
             pd_tx = PagoDigitalTx(int(ph.amount), card.token)
             ret, content = pd_gw.doPost(pd_tx.to_dict())

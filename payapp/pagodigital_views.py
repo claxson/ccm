@@ -32,6 +32,7 @@ from misc import post_to_promiscuus
 from pagodigital import PagoDigitalGateway
 from pagodigital import PagoDigitalCard
 from pagodigital import PagoDigitalTx
+from pagodigital import PagoDigitalJWTGateway
 
 from payapp.intercom import Intercom
 
@@ -220,14 +221,38 @@ def userpayment_form_pagodigital(request):
         up = form.user_payment
         
         # Obtengo settings del integrator
-        api_key    = IntegratorSetting.get_var(form.integrator, 'api_key')
+        api_key = IntegratorSetting.get_var(form.integrator, 'api_key')
         api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
         success_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_success')
-        failed_url  = IntegratorSetting.get_var(form.integrator, 'redirect_url_failed')
-        
+        failed_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_failed')
+        jwt_endpoint = IntegratorSetting.get_var(form.integrator, 'jwt_endpoint')
+        jwt_user = IntegratorSetting.get_var(form.integrator, 'jwt_user')
+        jwt_pass = IntegratorSetting.get_var(form.integrator, 'jwt_pass')
+
+        # Obtengo el JWT
+        pd_jwt_gw = PagoDigitalJWTGateway(jwt_endpoint, jwt_user, jwt_pass)
+        try:
+            ret, content = pd_jwt_gw.doPost()
+            if not ret:
+                message = "%s - %s" % (content['STATUS_MESSAGE'], content['MESSAGE'])
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+            if not 'TOKEN' in content:
+                message = "JWT ERROR - TOKEN key not found"
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+            pd_jwt = content['TOKEN']
+        except Exception as e:
+            message = 'jwt error: %s' % e
+            up.reply_error(message)
+            context = {'redirect_url': failed_url}
+            return render(request, template, context)
+
         # Realizar add card y obtener token
         pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
-        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret)
+        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret, pd_jwt)
         pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
                                   data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
                                   data['phone'], data['city'], data['state'])
@@ -288,7 +313,7 @@ def userpayment_form_pagodigital(request):
         if ph.amount > 0:
             # Realizar pago
             pd_tx_endpoint = IntegratorSetting.get_var(form.integrator, 'process_tx_endpoint')
-            pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret)
+            pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret, pd_jwt)
             try:
                 pd_tx = PagoDigitalTx(int(ph.amount), card.token)
                 ret, content = pd_gw.doPost(pd_tx.to_dict())
@@ -483,10 +508,28 @@ def add_card_form_pagodigital(request):
         api_key    = IntegratorSetting.get_var(form.integrator, 'api_key')
         api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
         redirect_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_add_card')
+        jwt_endpoint = IntegratorSetting.get_var(form.integrator, 'jwt_endpoint')
+        jwt_user = IntegratorSetting.get_var(form.integrator, 'jwt_user')
+        jwt_pass = IntegratorSetting.get_var(form.integrator, 'jwt_pass')
         
+        # Obtengo el JWT
+        pd_jwt_gw = PagoDigitalJWTGateway(jwt_endpoint, jwt_user, jwt_pass)
+        try:
+            ret, content = pd_jwt_gw.doPost()
+            if not ret:
+                context = {'redirect_url': redirect_url}
+                return render(request, template, context)
+            if not 'TOKEN' in content:
+                context = {'redirect_url': redirect_url}
+                return render(request, template, context)
+            pd_jwt = content['TOKEN']
+        except Exception as e:
+            context = {'redirect_url': redirect_url}
+            return render(request, template, context)
+
         # Realizar add card y obtener token
         pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
-        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret)
+        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret, pd_jwt)
         pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
                                   data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
                                   data['phone'], data['city'], data['state'])
