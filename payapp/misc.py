@@ -212,7 +212,8 @@ def post_to_intercom(ph, event, content):
 def post_to_promiscuus(obj, event):
     ep = Setting.get_var('promiscuus_endpoint')
     api_key = Setting.get_var('promiscuus_apikey')
-    p = Promiscuus(ep, api_key, 'ccm')
+    source = Setting.get_var('promiscuus_source')
+    p = Promiscuus(ep, api_key, source)
 
     PH_STATUS = {'A': 'approved', 'C': 'cancelled', 'R': 'rejected', 'E': 'error'}
 
@@ -276,7 +277,7 @@ def post_to_promiscuus(obj, event):
         return {'status': 'error', 'message': ret.text}
 
     
-def paymentez_payment(up, card, logging, manual):
+def paymentez_payment(up, card, logging, manual, amount):
     try:
         gw = PaymentezGateway(IntegratorSetting.get_var(card.integrator,'paymentez_server_application_code'),
                               IntegratorSetting.get_var(card.integrator,'paymentez_server_app_key'),
@@ -298,9 +299,9 @@ def paymentez_payment(up, card, logging, manual):
 
     # Genero tx id sumando al userid el timestamp
     payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
-
+    print(amount)
     # Creo el registro en PaymentHistory
-    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual)    
+    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual, '', 'P', amount)    
     logging.info("paymentez_payment(): Payment history created. ID: %s" % ph.payment_id)
 
     # Verico si es primer pago o rebill        
@@ -433,7 +434,7 @@ def paymentez_payment(up, card, logging, manual):
         return False
 
         
-def pagodigital_payment(up, card, logging, manual):
+def pagodigital_payment(up, card, logging, manual, amount):
     # Aplico descuento si corresponde
     disc_flag = False
     if up.disc_counter > 0:
@@ -447,7 +448,7 @@ def pagodigital_payment(up, card, logging, manual):
     payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
 
     # Creo el registro en PaymentHistory
-    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual)    
+    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual, '', 'P', amount)    
     logging.info("pagodigital_payment(): Payment history created. ID: %s" % ph.payment_id)
 
     # Verico si es primer pago o rebill        
@@ -506,11 +507,14 @@ def pagodigital_payment(up, card, logging, manual):
     if ret:
         # Obtengo los valores segun la respuesta de Pagodigital
         pr = pagodigital_translator(content)
-        
+
         # Seteo los valores de la UserPayment
         logging.info("pagodigital_payment(): Setting UserPayment values: status: %s - enabled: %s - message: %s"
                      % (pr["up_status"], str(pr["up_recurrence"]), pr["up_recurrence"]))
-        up.status  = pr["up_status"]
+        if pr["up_status"] == 'ER':
+            up.status = 'RE'
+        else:
+            up.status = pr["up_status"]
         up.message = pr["up_message"]
         up.enabled = pr["up_recurrence"]
 
@@ -590,11 +594,11 @@ def pagodigital_payment(up, card, logging, manual):
         
         
         
-def make_payment(up, card, logging=None, manual=False):
+def make_payment(up, card, logging=None, manual=False, amount=None):
     if card.integrator.name == 'paymentez':
-        ret = paymentez_payment(up, card, logging, manual)
+        ret = paymentez_payment(up, card, logging, manual, amount)
     elif card.integrator.name == 'pagodigital':
-        ret = pagodigital_payment(up, card, logging, manual)
+        ret = pagodigital_payment(up, card, logging, manual, amount)
     else:
         ret = False
     return ret

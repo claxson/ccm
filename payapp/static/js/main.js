@@ -394,7 +394,7 @@ app.renders.rePayActions = (data, type, row) => {
   
   if (row.status == 'RE') {
     btn += `<a href="javascript:void(0)" 
-              onclick="app.modalManualPay('${row.user_payment_id}')"
+              onclick="app.modalManualPay('${row.user_payment_id}','${row.amount}')"
               class="btn btn-link btn-sm text-black-50" 
               role="button" data-toggle="tooltip" 
               data-placement="top" title="Pago manual">
@@ -909,39 +909,74 @@ app.modalRePayDetail = prm => {
 
 /**
  * Recurrencias - Modal pago manual
- * @param {string} prm
+ * @param {string} userpayment_id
+ * @param {string} amount
  */
-app.modalManualPay = prm => {
+app.modalManualPay = (userpayment_id, amount) => {
+  amount = amount ? parseFloat(amount, 2) : '';
+
   this.modal({
     title: 'Pago manual',
-    body: '¿Está seguro de que desea realizar el pago manual?',
-    footer: `<a href="javascript:void(0)" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</a>
-             <a href="javascript:void(0)" class="btn btn-sm btn-danger" id="btnManualPay">Pagar</a>`
+    body: `<form>
+             <div class="form-group">
+	       <label for="inpAmount">¿Está seguro de que desea realizar el pago manual?</label>
+               <div class="row">
+                 <div class="col-6">
+                   <div class="input-group" lang="en-US">
+                     <input type="number" step="any" class="form-control" value="${amount}" id="inpAmount" disabled>
+                     <div class="input-group-append">
+                       <button class="btn btn-sm btn-secondary" type="button" id="btnEdit">
+                         <i class="fas fa-lg fa-pencil-alt"></i>
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+               <small class="form-text text-muted">Ingrese un monto (opcional).</small>
+             </div>
+           </form>`,
+    footer: `<a href="javascript:void(0)" class="btn btn-sm btn-danger" id="btnManualPay">Pagar</a>`
+  });
+
+  $('#btnEdit').on('click', () => {
+    if ($('#inpAmount').is(':disabled')) {
+      $('#inpAmount').attr('disabled', false);
+    } else {
+      $('#inpAmount').attr('disabled', true);
+    }
   });
 
   $('#btnManualPay').on('click', () => {
-    let data = { 'userpayment_id': prm }
+   if ($('#inpAmount')[0].checkValidity()) {
+     let data = {
+       'userpayment_id': userpayment_id,
+     }
+    
+     if (amount != $('#inpAmount').val()) {
+       data.amount = $('#inpAmount').val();
+     }
 
-    $.ajax({
-      type: 'POST',
-      url: '/ui/manualpayment/',
-      data: JSON.stringify(data),
-      beforeSend:
-        this.loadingButton({
-          selector: '#btnManualPay',
-          loading: true 
-        })
-    }).done(() => {
-      alert = `<div class="alert alert-success" role="alert">Pago efectuado correctamente.</div>`;
-    }).fail(resp => {
-      alert = `<div class="alert alert-danger" role="alert">${resp.responseJSON.message}</div>`;
-    }).always(() => {
-      $(app.config.tableSelector).DataTable().ajax.reload(null, false);
-      $('.modal-body').prepend(alert);
-      this.loadingButton({
-        selector: '#btnManualPay'
-      })
-    });
+     $.ajax({
+       type: 'POST',
+       url: '/ui/manualpayment/',
+       data: JSON.stringify(data),
+       beforeSend:
+         this.loadingButton({
+           selector: '#btnManualPay',
+           loading: true
+         })
+     }).done(() => {
+       alert = `<div class="alert alert-success" role="alert">Pago efectuado correctamente.</div>`;
+     }).fail(resp => {
+       alert = `<div class="alert alert-danger" role="alert">${resp.responseJSON.message}</div>`;
+     }).always(() => {
+       $(app.config.tableSelector).DataTable().ajax.reload(null, false);
+       $('.modal-body').prepend(alert);
+       this.loadingButton({
+         selector: '#btnManualPay'
+       })
+     });
+    }
   });
 }
 

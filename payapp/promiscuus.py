@@ -19,7 +19,7 @@ class Promiscuus(object):
             if key in keys:
                 if value is not None and value != '':
                     ret[key] = value
-        ret['source'] = 'ccm'
+        ret['source'] = self.source
         return ret
 
     def event_cancel(self, **kwargs):
@@ -54,6 +54,24 @@ class Promiscuus(object):
         if 'user_id' in kwargs:
             data = self.__loader(keys, kwargs)
             data['event'] = 'rebill'
+            return self.post(data)
+        else:
+            raise Exception('Mandatory field is missing: \"user_id\"')
+
+    def event_poll(self, **kwargs):
+        keys = ['user_id', 'selection', 'comments']
+        if 'user_id' in kwargs:
+            data = self.__loader(keys, kwargs)
+            data['event'] = 'poll'
+            return self.post(data)
+        else:
+            raise Exception('Mandatory field is missing: \"user_id\"')
+
+    def event_discount(self, **kwargs):
+        keys = ['user_id', 'discount', 'counter']
+        if 'user_id' in kwargs:
+            data = self.__loader(keys, kwargs)
+            data['event'] = 'discount'
             return self.post(data)
         else:
             raise Exception('Mandatory field is missing: \"user_id\"')

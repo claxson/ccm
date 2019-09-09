@@ -217,6 +217,10 @@ h6 { font-weight: 900 }
   border-color: none;
 }
 
+.input-group > .input-group-append > .btn {
+  border: none;
+}
+
 /* Date range */
 .daterangepicker td.active, .daterangepicker td.active:hover {
   background-color: #ff4040;
@@ -233,6 +237,10 @@ body,html{
 }
 
 .input-group-text { min-width: 42px; }
+
+.form-control {
+  font-size: 1rem;
+}
 
 .form-control-lg {
   font-size: 1.1rem;

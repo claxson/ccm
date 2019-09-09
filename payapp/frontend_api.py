@@ -765,8 +765,8 @@ def deleteuserpayment(request):
                 if json_data['txtmessage'] != '':
                     registro.message = json_data['txtmessage']
 
-                registro.enabled    = False
-                registro.status     = 'CA'
+                #registro.enabled    = False
+                #registro.status     = 'CA'
                 registro.channel    = 'X'
                 registro.save()
 
@@ -774,7 +774,8 @@ def deleteuserpayment(request):
                 integrator = Integrator.objects.get(country=registro.user.country)
 
                 if integrator.name == 'commerce_gate':
-                    url = 'http://ccm-stg.claxson.com/api/v1/commercegate/set/cancel'
+                    baseurl = Setting.get_var('baseurl')
+                    url = "%sapi/v1/commercegate/set/cancel" % baseurl
                     user_id = { 'user_id': registro.user.user_id }
                     data = json.dumps(user_id)
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
@@ -807,8 +808,12 @@ def manual_payment(request):
             try:
                 json_data = json.loads(request.body)
                 userpayment_id = json_data['userpayment_id']
+                print(json_data)
+                if 'amount' in json_data: 
+                    amount = float(json_data['amount'])
+                else:
+                    amount = None
                 up = UserPayment.get_by_id(userpayment_id)
-
                 if up is None:
                     return JsonResponse({'message': 'Error al realizar el pago, el usuario no existe'}, status=500)
 
@@ -830,7 +835,7 @@ def manual_payment(request):
                     up.error(msg)
                     return JsonResponse({'message': msg}, status=500)
 
-                pay = make_payment(up, card, logging, True)
+                pay = make_payment(up, card, logging, True, amount)
 
                 if pay:
                     return JsonResponse({'message': 'Pago efectuado correctamente'}, status=200)

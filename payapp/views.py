@@ -499,8 +499,9 @@ def cancel_payment(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
     # Si el integrador es CommerceGate ejecuto baja para ese integrador
-    ph = PaymentHistory.objects.filter(user_payment=up).order_by('-id')[0]
-    if ph.integrator.name == 'commerce_gate':
+    # ph = PaymentHistory.objects.filter(user_payment=up).order_by('-id')[0]
+    #if ph.integrator.name == 'commerce_gate':
+    if not up.internal:
         return cancel_commercegate(request)
         
 

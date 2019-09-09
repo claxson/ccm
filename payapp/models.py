@@ -525,9 +525,11 @@ class PaymentHistory(models.Model):
     def __unicode__(self):
         return self.payment_id
 
-    def __amounts_calculator(self):
-        amount = self.user_payment.calculate_discount()
-        tax    = self.user_payment.user.country.tax
+    def __amounts_calculator(self, amount):
+        # Si el monto es aplicado manualmente no aplico descuento
+        if amount is None:
+            amount = self.user_payment.calculate_discount()        
+        tax = self.user_payment.user.country.tax
 
         if tax > 0:
             if self.user_payment.user.country.full_price:
@@ -553,10 +555,20 @@ class PaymentHistory(models.Model):
             return None
 
     @classmethod
-    def create(cls, user_payment, payment_id, integrator, card=None, disc_pct=0, manual=False, gateway_id='', status='P'):
+    def get_first_approved(cls, user_payment):
+        try:
+            return cls.objects.filter(user_payment=user_payment, status='A').order_by('id')[0]
+        except Exception:
+            return None
+
+    @classmethod
+    def create(cls, user_payment, payment_id, integrator, card=None, disc_pct=0, manual=False, gateway_id='', status='P', amount=None):
         ph = cls()
         ph.user_payment   = user_payment
-        amounts = ph.__amounts_calculator()
+        amounts = ph.__amounts_calculator(amount)
+        # Si el monto es ingresado manualmente no aplico el descuento
+        if amount is not None:
+            disc_pct = 0
 
         ph.card           = card
         ph.status         = status

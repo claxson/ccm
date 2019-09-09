@@ -194,16 +194,28 @@ def cancel_commercegate(request):
 
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_NOT_FOUND)
 
-    params = { 'customerId': customer_id, 'websiteId': website_id, 'password': password, 'username': data['user_id'] }
+    up = UserPayment.get_active(user=user)
+    if up is None:
+        message = "user_id %s has not enabled recurring payment" % data['user_id']
+        body = {'status': 'error', 'message': message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+
+    ph = PaymentHistory.get_first_approved(up)
+    if ph is None:
+        message = "there isnt approved payments for userpayment_id %s" % up.user_payment_id
+        body = {'status': 'error', 'message': message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+
+    #params = { 'customerId': customer_id, 'websiteId': website_id, 'password': password, 'username': data['user_id'] }
+    params = { 'customerId': customer_id, 'password': password, 'first_transaction_id': ph.gateway_id }
     url = '%s?%s' % (endpoint_cancel, urlencode(params))
 
     # Llamo a la api de commercegate
     try:
         resp, content = Http().request(url, 'POST')
-    except Exception:
+    except Exception as e:
         message = 'communication error with commercegate'
-        body = { 'status': 'error', 'message': message }
-
+        body = { 'status': 'error', 'message': e }
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
 
     body = { 'status': 'success' }
