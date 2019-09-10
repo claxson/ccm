@@ -230,8 +230,11 @@ def callback_commercegate(request):
         transaction_reference_id = xml_data['TransactionReferenceID']
 
     if transaction_type == 'SALE':
-        up = UserPayment.objects.get(user=user, status='PE')
-        ph = PaymentHistory.objects.get(user_payment__user_payment_id=up.user_payment_id, status='P')
+        try:
+            up = UserPayment.objects.filter(user=user, status='PE').order_by('-id')[0]
+            ph = PaymentHistory.objects.filter(user_payment__user_payment_id=up.user_payment_id, status='P').order_by('-id')[0]
+        except Exception as e:
+            return HttpResponse('Error getting up or ph: %s' %e, content_type='text/plain', status='200')
 
         # Activar user payment
         up.active()
@@ -336,4 +339,5 @@ def callback_commercegate(request):
         except:
             print 'Refund: Transaction ID %s not found' %transaction_reference_id
 
+    print(xml)
     return HttpResponse('SUCCESS', content_type='text/plain', status='200')
