@@ -779,6 +779,10 @@ def deleteuserpayment(request):
                     user_id = { 'user_id': registro.user.user_id }
                     data = json.dumps(user_id)
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
+                else:
+                    registro.enabled    = False
+                    registro.status     = 'CA'
+                    registro.save()
 
                 # Envio envento a Intercom
                 ep = Setting.get_var('intercom_endpoint')
