@@ -19,6 +19,7 @@ import logging
 from datetime import timedelta, date, datetime
 from intercom import Intercom
 from misc import make_payment
+from misc import post_to_promiscuus
 from time import mktime
 
 from httplib2 import Http
@@ -763,26 +764,29 @@ def deleteuserpayment(request):
                 registro            = UserPayment.objects.get(user_payment_id=userpayment_id)
 
                 if json_data['txtmessage'] != '':
-                    registro.message = json_data['txtmessage']
-
-                #registro.enabled    = False
-                #registro.status     = 'CA'
-                registro.channel    = 'X'
-                registro.save()
+                    registro.message = json_data['txtmessage']               
 
                 # Envio cancelacion a CommerceGate
                 integrator = Integrator.objects.get(country=registro.user.country)
 
                 if integrator.name == 'commerce_gate':
+                    registro.channel = 'X'
+                    registro.save()
                     baseurl = Setting.get_var('baseurl')
                     url = "%sapi/v1/commercegate/set/cancel" % baseurl
                     user_id = { 'user_id': registro.user.user_id }
                     data = json.dumps(user_id)
                     resp, content = Http().request(url, 'POST', body=data, headers={ 'content-type': 'application/json' })
                 else:
-                    registro.enabled    = False
-                    registro.status     = 'CA'
+                    registro.channel = 'X'
+                    registro.enabled = False
+                    registro.status = 'CA'
                     registro.save()
+                    # POST to promiscuus
+                    resp_promiscuus = post_to_promiscuus(registro, 'cancel')
+                    if resp_promiscuus['status'] == 'error':
+                        registro.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
+                        registro.save()
 
                 # Envio envento a Intercom
                 ep = Setting.get_var('intercom_endpoint')
