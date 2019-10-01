@@ -324,6 +324,14 @@ class UserPayment(models.Model):
         except ObjectDoesNotExist:
             return None        
     
+    @classmethod
+    def get_last(cls, user):
+        ups = cls.objects.filter(user=user).exclude(status='PE').order_by('-modification_date')
+        if len(ups) > 0:
+            return ups[0]
+        else:
+            return None
+
     def discount(self, discount, disc_counter):
         self.disc_pct     = discount
         self.disc_counter = disc_counter
@@ -443,6 +451,13 @@ class UserPayment(models.Model):
         self.enable_card = True
         self.save()
         return self
+
+    def get_integrator(self):
+        phs = PaymentHistory.objects.filter(user_payment=self).order_by('-modification_date')
+        if len(phs) > 0:
+            return phs[0].integrator
+        else:
+            return None
 
 
 class Card(models.Model):

@@ -730,23 +730,30 @@ def user_status(request, user_id):
         ret['expiration'] = None
 
     # Obtengo el UserPayment activo y si no existe devuelvo solo fecha de expiracion
-    try:
-        up = UserPayment.objects.get(user=user, status='AC')
-    except ObjectDoesNotExist:
+    up = UserPayment.get_active(user)
+    if up is None:
+        up = UserPayment.get_last(user)
+        if up is not None:
+            ret['status_detail'] = up.status
+        else:
+            ret['status_detail'] = 'ER'
         ret['status']  = 'E'
-        ret['message'] = 'Enabled UserPayement not found'
         body = {'status': 'success', 'value': ret}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
     
     ret['status']   = 'A'
     ret['message']  = ''
- 
+    ret['status_detail'] = up.status
     ret['recurrence']   = up.recurrence
     ret['payment_date'] = mktime(up.payment_date.timetuple())
     ret['currency']     = up.currency.code
     ret['amount']       = up.amount
     ret['discount']     = up.disc_pct
     ret['disc_counter'] = up.disc_counter
+
+    integrator = up.get_integrator()
+    if integrator is not None:
+        ret['integrator'] = integrator.name
     
     body = {'status': 'success', 'value': ret}
     return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
