@@ -29,7 +29,7 @@ from pagodigital import PagoDigitalGateway
 from pagodigital import PagoDigitalTx
 from pagodigital import PagoDigitalJWTGateway
 
-from payapp.intercom import Intercom
+#from payapp.intercom import Intercom
 
 from time import time
 from time import mktime
@@ -379,6 +379,7 @@ def paymentez_payment(up, card, logging, manual, amount):
             logging.info("paymentez_payment(): Disabling user access to %s" % up.user.user_id)
             up.user.expire()
 
+        """
         if pr["intercom"]["action"]:
             logging.info("paymentez_payment(): Sending event to Intercom: %s" % pr["intercom"]["event"])
             ep = Setting.get_var('intercom_endpoint')
@@ -399,7 +400,8 @@ def paymentez_payment(up, card, logging, manual, amount):
                 ph.message = "%s - %s" % (ph.message, msg)
                 logging.info("paymentez_payment(): %s" % msg)
                 ph.save()     
-        
+        """
+
         # POST to Promiscuus
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
         if resp_promiscuus['status'] == 'error':
@@ -553,12 +555,14 @@ def pagodigital_payment(up, card, logging, manual, amount):
             user.expire()
             
         # Posteo en intercomo si es requerido
+        """
         if pr["intercom"]["action"]:
             logging.info("pagodigital_payment(): Sending event to Intercom: %s" % pr["intercom"]["event"])
             content['amount'] = ph.amount
             if up.user.expiration is not None:
                 content['expire_at'] = mktime(up.user.expiration.timetuple())
             ph = post_to_intercom(ph, pr["intercom"]["event"], pagodigital_intercom_metadata(content))               
+        """
 
         # POST to Promiscuus
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)

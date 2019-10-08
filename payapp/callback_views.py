@@ -32,10 +32,10 @@ from time import mktime
 from time import time
 
 from misc import paymentez_translator
-from misc import paymentez_intercom_metadata
+#from misc import paymentez_intercom_metadata
 from misc import post_to_promiscuus
 
-from intercom import Intercom
+#from intercom import Intercom
 
 import logging
 import urllib
@@ -130,6 +130,7 @@ def __callback_paymentez_proc(data, country):
         if pr["user_expire"]:
             ph.user_payment.user.expire()
 
+        """
         if pr["intercom"]["action"]:
             ep = Setting.get_var('intercom_endpoint')
             token = Setting.get_var('intercom_token')
@@ -143,6 +144,7 @@ def __callback_paymentez_proc(data, country):
             except Exception as e:
                 ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
                 ph.save()
+        """
 
         # Verico si es primer pago o rebill        
         if PaymentHistory.objects.filter(user_payment=ph.user_payment).count() == 1:
@@ -204,9 +206,11 @@ def callback_paymentez(request):
 def callback_commercegate(request):
     integrator = Integrator.get('commerce_gate')    
 
+    """
     ep       = Setting.get_var('intercom_endpoint')
     token    = Setting.get_var('intercom_token')
     intercom = Intercom(ep, token)
+    """
 
     try:
         data            = request.body
@@ -248,6 +252,7 @@ def callback_commercegate(request):
         user.set_expiration(up.calc_payment_date(timezone.now()))
 
         # Posteo en Intercom
+        """
         intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
         if user.expiration is not None:
             intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
@@ -261,6 +266,7 @@ def callback_commercegate(request):
         except Exception as e:
             ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
             ph.save()
+        """
         print 'CommerceGate callback: Sale'
 
         # POST to promiscuus
@@ -284,9 +290,11 @@ def callback_commercegate(request):
         ph = PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
         
         # Posteo en Intercom
+        """
         intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
         if user.expiration is not None:
             intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
+        
         
         try:
             reply = intercom.submitEvent(up.user.user_id, up.user.email, "approved-pay", intercom_metadata)
@@ -297,7 +305,7 @@ def callback_commercegate(request):
         except Exception as e:
             ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
             ph.save()
-
+        """
         print 'CommerceGate callback: Rebill'
 
         # POST to promiscuus
@@ -311,6 +319,7 @@ def callback_commercegate(request):
         up.cancel('U')
         
         # Poster pago a Intercom
+        """
         try:
             reply = intercom.submitEvent(up.user.user_id, up.user.email, "cancelled-sub",
                                      {"event_description": "recurrencia cancelada por el usuario"})
@@ -320,7 +329,7 @@ def callback_commercegate(request):
         except Exception as e:
             up.message = "Intercom error: %s" % str(e)
             up.save()
-
+        """
         # POST to promiscuus
         resp_promiscuus = post_to_promiscuus(up, 'cancel')
         if resp_promiscuus['status'] == 'error':

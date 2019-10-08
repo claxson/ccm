@@ -37,10 +37,10 @@ from paymentez import PaymentezRefund
 from paymentez import DeleteCard
 
 from misc import paymentez_translator
-from misc import paymentez_intercom_metadata
+#from misc import paymentez_intercom_metadata
 from misc import post_to_promiscuus
 
-from intercom import Intercom
+#from intercom import Intercom
 
 from commercegate_views import cancel_commercegate
 
@@ -322,6 +322,7 @@ def create_payment(request):
                 if pr["user_expire"]:
                     user.expire()
 
+                """
                 if pr["intercom"]["action"]:
                     ep    = Setting.get_var('intercom_endpoint')
                     token = Setting.get_var('intercom_token')
@@ -337,7 +338,8 @@ def create_payment(request):
                     except Exception as e:
                         ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
                         ph.save()                
-                
+                """
+
                 # POST to promiscuus
                 resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
                 if resp_promiscuus['status'] == 'error':
@@ -514,6 +516,7 @@ def cancel_payment(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
 
     # Envio envento a intercom
+    """
     ep    = Setting.get_var('intercom_endpoint')
     token = Setting.get_var('intercom_token')
     try:
@@ -526,7 +529,8 @@ def cancel_payment(request):
     except Exception as e:
         up.message = "Intercom error: %s" % str(e)
         up.save()
-    
+    """
+
     # POST to promiscuus
     resp_promiscuus = post_to_promiscuus(up, 'cancel')
     if resp_promiscuus['status'] == 'error':

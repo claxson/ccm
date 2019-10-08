@@ -17,7 +17,7 @@ import json
 import logging
 
 from datetime import timedelta, date, datetime
-from intercom import Intercom
+#from intercom import Intercom
 from misc import make_payment
 from misc import post_to_promiscuus
 from time import mktime
@@ -702,6 +702,7 @@ def expireuser(request):
                 user.save()
 
                 # Envio envento a intercom
+                """
                 ep = Setting.get_var('intercom_endpoint')
                 token = Setting.get_var('intercom_token')
                 try:
@@ -712,6 +713,7 @@ def expireuser(request):
                         user.user_id, user.email, "user_expired", metadata)
                 except Exception as e:
                     pass
+                """
 
                 return JsonResponse({'message': 'Guardado correctamente', 'data': fecha}, status=200)
             except Exception as e:
@@ -733,6 +735,7 @@ def activateuser(request):
                 date = user.enable_for(days)
 
                 # Envio evento a intercom
+                """
                 ep = Setting.get_var('intercom_endpoint')
                 token = Setting.get_var('intercom_token')
 
@@ -746,6 +749,7 @@ def activateuser(request):
                         user.user_id, user.email, 'user_activated', metadata)
                 except Exception as e:
                     pass
+                """
 
                 return JsonResponse({'message': 'activado correctamente'}, status=200)
             except Exception as e:
@@ -789,6 +793,7 @@ def deleteuserpayment(request):
                         registro.save()
 
                 # Envio envento a Intercom
+                """
                 ep = Setting.get_var('intercom_endpoint')
                 token = Setting.get_var('intercom_token')
 
@@ -802,6 +807,7 @@ def deleteuserpayment(request):
                 except Exception as e:
                     registro.message = "Intercom error: %s" % str(e)
                     registro.save()
+                """
 
                 return JsonResponse({'message': 'activado correctamente'}, status=200)
             except Exception as e:

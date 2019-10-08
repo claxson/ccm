@@ -29,10 +29,10 @@ from datetime import timedelta
 
 
 from payapp.misc import paymentez_translator
-from payapp.misc import paymentez_intercom_metadata
+#from payapp.misc import paymentez_intercom_metadata
 from payapp.misc import make_payment
 
-from payapp.intercom import Intercom
+#from payapp.intercom import Intercom
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # System
@@ -93,6 +93,7 @@ def paymentez_callback_checker(integrator):
             ph.message = "callback timeout error"
             ph.save()
 
+            """
             logging.info("paymentez_callback_checker(): Sending event to Intercom: rejected-pay")
             ep = Setting.get_var('intercom_endpoint')
             token = Setting.get_var('intercom_token')
@@ -118,7 +119,7 @@ def paymentez_callback_checker(integrator):
                 ph.message = "%s - %s" % (ph.message, msg)
                 logging.info("paymentez_callback_checker(): %s" % msg)
                 ph.save()
-
+            """
 
 def payd_main():
     logging.basicConfig(format   = '%(asctime)s - payd.py -[%(levelname)s]: %(message)s',

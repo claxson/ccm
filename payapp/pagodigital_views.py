@@ -23,9 +23,9 @@ from models import Setting
 from models import Form
 from models import Card
 
-from misc import post_to_intercom
+#from misc import post_to_intercom
 from misc import pagodigital_translator
-from misc import pagodigital_intercom_metadata
+#from misc import pagodigital_intercom_metadata
 from misc import unicodetoascii
 from misc import post_to_promiscuus
 
@@ -34,7 +34,7 @@ from pagodigital import PagoDigitalCard
 from pagodigital import PagoDigitalTx
 from pagodigital import PagoDigitalJWTGateway
 
-from payapp.intercom import Intercom
+#from payapp.intercom import Intercom
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
@@ -363,11 +363,13 @@ def userpayment_form_pagodigital(request):
                 user.expire()
                 
             # Posteo en intercomo si es requerido
+            """
             if pr["intercom"]["action"]:
                 content['amount'] = ph.amount
                 if user.expiration is not None:
                     content['expire_at'] = mktime(user.expiration.timetuple())
                 post_to_intercom(ph, pr["intercom"]["event"], pagodigital_intercom_metadata(content))               
+            """
 
             # POST to promiscuus
             resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
