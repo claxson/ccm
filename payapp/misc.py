@@ -18,6 +18,7 @@ from payapp.models import Card
 from payapp.models import Integrator
 from payapp.models import IntegratorSetting
 from payapp.models import PaymentHistory
+from payapp.models import User
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Misc
@@ -216,13 +217,10 @@ def post_to_promiscuus(obj, event):
     p = Promiscuus(ep, api_key, source)
 
     PH_STATUS = {'A': 'approved', 'C': 'cancelled', 'R': 'rejected', 'E': 'error'}
+    
 
     if event == 'payment_commit':
-        if obj.user_payment.user.expiration is not None:
-            access_until = mktime(obj.user_payment.user.expiration.timetuple())
-        else:
-            access_until = None
-
+        access_until = User.get_expiration(obj.user_payment.user.user_id)
         try:
             ret = p.event_payment_commit(user_id=obj.user_payment.user.user_id,
                                         method_name=obj.integrator.name,
@@ -244,11 +242,7 @@ def post_to_promiscuus(obj, event):
         else:
             rebill_type = 'auto'
 
-        if obj.user_payment.user.expiration is not None:
-            access_until = mktime(obj.user_payment.user.expiration.timetuple())
-        else:
-            access_until = None
-
+        access_until = User.get_expiration(obj.user_payment.user.user_id)
         try:
             ret = p.event_rebill(user_id=obj.user_payment.user.user_id,
                                 amount=obj.amount,
@@ -263,10 +257,11 @@ def post_to_promiscuus(obj, event):
 
     elif event == 'cancel':
         CHANNEL = {'E': '', 'U': 'user', 'R': 'reply', 'C': 'callback', 'T': 'timeout', 'F': 'refund', 'X': 'claxson'}
+        access_until = User.get_expiration(obj.user.user_id)
         try:
             ret = p.event_cancel(user_id=obj.user.user_id,
                                 channel=CHANNEL[obj.channel],
-                                access_until=mktime(obj.user.expiration.timetuple()))
+                                access_until=access_until)
                                                                           
         except Exception as err:
             return {'status': 'error', 'message': err}

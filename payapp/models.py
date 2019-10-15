@@ -174,6 +174,14 @@ class User(models.Model):
         us.country    = country
         us.save()
         return us
+
+    @classmethod
+    def get_expiration(cls, user_id):
+        try:
+            user = User.objects.get(user_id=user_id)
+            return time.mktime(user.expiration.timetuple())
+        except Exception:
+            return None
     
     def get_card(self):
         try:
