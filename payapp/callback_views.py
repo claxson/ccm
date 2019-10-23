@@ -336,11 +336,22 @@ def callback_commercegate(request):
             up.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
             up.save()    
 
-        print 'CommerceGate callback: Cancel membership notify'
+        print 'CommerceGate callback: Cancel membership notify. User: %s' % user.user_id
+        
     elif transaction_type == 'CANCELMEMBERSHIP':
-        user.expire()
+        up = UserPayment.get_active(user)
+        if up is not None:
+            up.cancel('C')
 
-        print 'CommerceGate callback: Cancel membership'
+            # POST to promiscuus
+            resp_promiscuus = post_to_promiscuus(up, 'cancel')
+            if resp_promiscuus['status'] == 'error':
+                up.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
+                up.save()
+
+        user.expire()
+        print 'CommerceGate callback: Cancel membership. User: %s' % user.user_id
+
     elif transaction_type == 'REFUND':
         try:
             ph = PaymentHistory.objects.get(gateway_id=transaction_reference_id)
