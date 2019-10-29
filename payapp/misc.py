@@ -172,6 +172,9 @@ def pagodigital_translator(content):
     else:
         ret["up_message"] = ""
 
+    if ret["up_message"] is None:
+        ret["up_message"] = ""
+
     ret["up_recurrence"] = data["up_recurrence"]
 
     ret["ph_status"]    = data["ph_status"]
