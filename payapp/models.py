@@ -75,6 +75,13 @@ class Country(models.Model):
             return None
 
     @classmethod
+    def get_by_code(cls, code):
+        try:
+            return cls.objects.get(code=code)
+        except ObjectDoesNotExist:
+            return None
+
+    @classmethod
     def get_all(cls):
         countries = cls.objects.all()
         ret = {}
@@ -100,6 +107,13 @@ class Integrator(models.Model):
         try:
             return cls.objects.get(name=name)
         except Exception:
+            return None
+
+    @classmethod
+    def get_by_country(cls, name, country):
+        try:
+            return cls.objects.get(name=name, country=country)
+        except ObjectDoesNotExist:
             return None
 
 

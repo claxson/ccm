@@ -53,15 +53,15 @@ def __check_apikey(request):
 
 
 # Integrator Settings
-integrator           = Integrator.get('commerce_gate')
-redirect_url_failed  = IntegratorSetting.get_var(integrator, 'redirect_url_failed')
-redirect_url_success = IntegratorSetting.get_var(integrator, 'redirect_url_success')
-endpoint             = IntegratorSetting.get_var(integrator, 'endpoint')
-endpoint_token       = IntegratorSetting.get_var(integrator, 'endpoint_token')
-endpoint_cancel      = IntegratorSetting.get_var(integrator, 'endpoint_cancel')
-website_id           = IntegratorSetting.get_var(integrator, 'website_id')
-customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
-password             = IntegratorSetting.get_var(integrator, 'password')
+#integrator           = Integrator.get('commerce_gate')
+#redirect_url_failed  = IntegratorSetting.get_var(integrator, 'redirect_url_failed')
+#redirect_url_success = IntegratorSetting.get_var(integrator, 'redirect_url_success')
+#endpoint             = IntegratorSetting.get_var(integrator, 'endpoint')
+#endpoint_token       = IntegratorSetting.get_var(integrator, 'endpoint_token')
+#endpoint_cancel      = IntegratorSetting.get_var(integrator, 'endpoint_cancel')
+#website_id           = IntegratorSetting.get_var(integrator, 'website_id')
+#customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
+#password             = IntegratorSetting.get_var(integrator, 'password')
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                                Devuelve JSON con URL de formulario de pago                                 #
@@ -84,7 +84,7 @@ def payment_commercegate(request):
         body = { 'status': 'error', 'message': message }
 
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
-
+    
     # Verifico las key mandatorias
     keys = [ 'user_id', 'email', 'recurrence' ]
 
@@ -95,9 +95,29 @@ def payment_commercegate(request):
 
         return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
 
+    # Obtengo pais
+    country = Country.get_by_code(data['user_id'].split("_")[0].lower())
+
+    # Obtengo Integrador
+    integrator = Integrator.get_by_country('commerce_gate', country)
+    if integrator is None:
+        message = "integrator does not exist for country %s" % country.name
+        body = {'status': 'error', 'message': message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+
+    # Obtengo Integrator Settings
+    redirect_url_failed  = IntegratorSetting.get_var(integrator, 'redirect_url_failed')
+    redirect_url_success = IntegratorSetting.get_var(integrator, 'redirect_url_success')
+    endpoint             = IntegratorSetting.get_var(integrator, 'endpoint')
+    endpoint_token       = IntegratorSetting.get_var(integrator, 'endpoint_token')
+    website_id           = IntegratorSetting.get_var(integrator, 'website_id')
+    customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
+    #password             = IntegratorSetting.get_var(integrator, 'password')
+
+
     # Verifico si el usuario existe y sino lo creo
     try:
-        user       = User.objects.get(user_id=data['user_id'])
+        user = User.objects.get(user_id=data['user_id'])
         user.email = data['email']
         user.save()
     except ObjectDoesNotExist:
@@ -110,8 +130,6 @@ def payment_commercegate(request):
         body = { 'status': 'error', 'message': message }
 
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
-
-    country = Country.get(integrator.country)
 
     # Si tiene algun UserPayment habilitado devuelvo un error
     up = UserPayment.get_active(user)
@@ -129,7 +147,7 @@ def payment_commercegate(request):
 
     params = { 'cid': customer_id, 'wid': website_id, 'packid': package.package_id, 'username': data['user_id'], 'email': data['email']  }
     url = '%s?%s' % (endpoint_token, urlencode(params))
-
+    
     try:
         resp, content = Http().request(url, 'POST')
     except Exception as e:
@@ -176,8 +194,22 @@ def cancel_commercegate(request):
 
     if json_loader['status'] == 'error':
         json_loader['message'] = 'check api mandatory parameters'
-
         return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
+
+    # Obtengo pais
+    country = Country.get_by_code(data['user_id'].split("_")[0].lower())
+
+    # Obtengo Integrador
+    integrator = Integrator.get_by_country('commerce_gate', country)
+    if integrator is None:
+        message = "integrator does not exist for country %s" % country.name
+        body = {'status': 'error', 'message': message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+
+    # Obtengo Integrator Settings
+    endpoint_cancel      = IntegratorSetting.get_var(integrator, 'endpoint_cancel')
+    customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
+    password             = IntegratorSetting.get_var(integrator, 'password')
 
     # Verifico que el usuario existe o no este ya cancelado
     try:
@@ -246,6 +278,9 @@ def error_commercegate(request, user_payment_id):
             if resp_promiscuus['status'] == 'error':
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
                 ph.save()
+
+    # Obtengo Integrator Settings
+    redirect_url_failed  = IntegratorSetting.get_var(ph.integrator, 'redirect_url_failed')
 
     context = {'redirect_url': redirect_url_failed}
     return render(request, template, context)

@@ -204,7 +204,7 @@ def callback_paymentez(request):
 # CommerceGate Callback
 @require_http_methods(["GET", "POST"])
 def callback_commercegate(request):
-    integrator = Integrator.get('commerce_gate')    
+    #integrator = Integrator.get('commerce_gate')    
 
     """
     ep       = Setting.get_var('intercom_endpoint')
@@ -285,6 +285,9 @@ def callback_commercegate(request):
 
         # Modificar fecha de expiracion del usuario
         user.add_to_expiration(up.recurrence)
+
+        # Obtengo integrador
+        integrator = Integrator.get_by_country('commerce_gate', user.country)
 
         # Crear payment history
         ph = PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
