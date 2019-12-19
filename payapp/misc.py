@@ -520,7 +520,10 @@ def pagodigital_payment(up, card, logging, manual, amount):
 
         if up.status == 'AC':
             # calcular next_payment_day
-            up.payment_date = up.calc_payment_date()
+            if manual:
+                up.payment_date = up.calc_payment_date(timezone.now())
+            else:
+                up.payment_date = up.calc_payment_date()
             # Fija la fecha de expiration del usuario
             logging.info("pagodigital_payment(): New user expiration %d for user %s" % (up.recurrence, up.user.user_id))
             up.user.set_expiration(up.payment_date)
