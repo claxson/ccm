@@ -52,17 +52,6 @@ def __check_apikey(request):
         return {'status': 'error'}    
 
 
-# Integrator Settings
-#integrator           = Integrator.get('commerce_gate')
-#redirect_url_failed  = IntegratorSetting.get_var(integrator, 'redirect_url_failed')
-#redirect_url_success = IntegratorSetting.get_var(integrator, 'redirect_url_success')
-#endpoint             = IntegratorSetting.get_var(integrator, 'endpoint')
-#endpoint_token       = IntegratorSetting.get_var(integrator, 'endpoint_token')
-#endpoint_cancel      = IntegratorSetting.get_var(integrator, 'endpoint_cancel')
-#website_id           = IntegratorSetting.get_var(integrator, 'website_id')
-#customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
-#password             = IntegratorSetting.get_var(integrator, 'password')
-
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                                Devuelve JSON con URL de formulario de pago                                 #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -75,7 +64,7 @@ def payment_commercegate(request):
     cap = __check_apikey(request)
     if cap['status'] == 'error':
         return HttpResponse(status=http_UNAUTHORIZED)
-
+    
     # Cargo el JSON
     try:
         data = json.loads(request.body)
@@ -112,8 +101,6 @@ def payment_commercegate(request):
     endpoint_token       = IntegratorSetting.get_var(integrator, 'endpoint_token')
     website_id           = IntegratorSetting.get_var(integrator, 'website_id')
     customer_id          = IntegratorSetting.get_var(integrator, 'customer_id')
-    #password             = IntegratorSetting.get_var(integrator, 'password')
-
 
     # Verifico si el usuario existe y sino lo creo
     try:
@@ -123,7 +110,11 @@ def payment_commercegate(request):
     except ObjectDoesNotExist:
         user = User.create(data['user_id'], data['email'], integrator.country)
 
-    package = Package.get(data['recurrence'], integrator)
+    # Obtengo el paquete
+    if 'package_id' in data:
+        package = Package.get_by_id(data['package_id'], integrator)
+    else:
+        package = Package.get(data['recurrence'], integrator)
 
     if package is None:
         message = "package not found with that duration"
@@ -138,7 +129,7 @@ def payment_commercegate(request):
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
     else:    
-        up = UserPayment.create(user, package.duration, package.amount, country.currency)
+        up = UserPayment.create_from_package(user, package)
 
     payment_id = "PH_%s_%d" % (user.user_id, int(time()))
 
@@ -162,7 +153,6 @@ def payment_commercegate(request):
         iframe_params['successUrl'] = redirect_url_success
 
     if redirect_url_failed:
-        #iframe_params['failedUrl'] = redirect_url_failed
         iframe_params['failedUrl'] = "%s://%s/commercegate/error/%s" % (request.scheme, request.META['HTTP_HOST'], up.user_payment_id)
     
     iframe_url = '%s?%s' % (endpoint, urlencode(iframe_params))

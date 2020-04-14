@@ -41,7 +41,7 @@ class Promiscuus(object):
             raise Exception('Mandatory field is missing: \"user_id\"')
 
     def event_payment_commit(self, **kwargs):
-        keys = ['user_id', 'method_name', 'payment_type', 'package', 'duration', 'amount', 'discount', 'is_suscription', 'access_until', 'status', 'message']
+        keys = ['user_id', 'method_name', 'payment_type', 'package', 'duration', 'amount', 'discount', 'is_suscription', 'access_until', 'status', 'message', 'trial']
         if 'user_id' in kwargs:
             data = self.__loader(keys, kwargs)
             data['event'] = 'payment_commit'
@@ -50,7 +50,7 @@ class Promiscuus(object):
             raise Exception('Mandatory field is missing: \"user_id\"')
 
     def event_rebill(self, **kwargs):
-        keys = ['user_id', 'amount', 'access_until', 'status', 'message', 'discount', 'rebill_type']
+        keys = ['user_id', 'amount', 'access_until', 'status', 'message', 'discount', 'rebill_type', 'trial']
         if 'user_id' in kwargs:
             data = self.__loader(keys, kwargs)
             data['event'] = 'rebill'

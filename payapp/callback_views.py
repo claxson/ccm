@@ -115,8 +115,14 @@ def __callback_paymentez_proc(data, country):
             ph.user_payment.payment_date = ph.user_payment.calc_payment_date()
             # Fija la fecha de expiration del usuario
             ph.user_payment.user.set_expiration(ph.user_payment.payment_date)
-            if ph.user_payment.disc_counter > 0:
-                ph.user_payment.disc_counter = ph.user_payment.disc_counter - 1
+            # Si es trial, resto uno al contador
+            if ph.trial:
+                ph.user_payment.trial_counter -= 1
+            else:
+                # Si tiene descuento, resto uno al contador
+                if ph.user_payment.has_discount:
+                    ph.user_payment.disc_counter -= 1
+            
         else:
             ph.user_payment.channel = 'C'
         ph.user_payment.save()
@@ -129,22 +135,6 @@ def __callback_paymentez_proc(data, country):
 
         if pr["user_expire"]:
             ph.user_payment.user.expire()
-
-        """
-        if pr["intercom"]["action"]:
-            ep = Setting.get_var('intercom_endpoint')
-            token = Setting.get_var('intercom_token')
-            try:
-                intercom = Intercom(ep, token)
-                reply = intercom.submitEvent(ph.user_payment.user.user_id, ph.user_payment.user.email,
-                                             pr["intercom"]["event"], paymentez_intercom_metadata(data['transaction']))
-                if not reply:
-                    ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
-                    ph.save()
-            except Exception as e:
-                ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
-                ph.save()
-        """
 
         # Verico si es primer pago o rebill        
         if PaymentHistory.objects.filter(user_payment=ph.user_payment).count() == 1:
@@ -201,17 +191,10 @@ def callback_paymentez(request):
         body = {"status": "error", "message": "ignoring callback: app_code"}
         return HttpResponse(json.dumps(body), content_type="application/json", status=200)
 
+
 # CommerceGate Callback
 @require_http_methods(["GET", "POST"])
 def callback_commercegate(request):
-    #integrator = Integrator.get('commerce_gate')    
-
-    """
-    ep       = Setting.get_var('intercom_endpoint')
-    token    = Setting.get_var('intercom_token')
-    intercom = Intercom(ep, token)
-    """
-
     try:
         data            = request.body
         request_unquote = urllib.unquote_plus(data)
@@ -242,31 +225,17 @@ def callback_commercegate(request):
 
         # Activar user payment
         up.active()
-        up.user_payment = up.calc_payment_date(datetime.now())
+        up.payment_date = up.calc_payment_date(datetime.now())
+        if up.is_trial:
+            up.trial_counter -= 1
         up.save()
 
         # Aprobar payment history
         ph.approve(transaction_id)
 
         # Setear fecha de expiracion del usuario
-        user.set_expiration(up.calc_payment_date(timezone.now()))
+        user.set_expiration(up.payment_date)
 
-        # Posteo en Intercom
-        """
-        intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
-        if user.expiration is not None:
-            intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
-             
-        try:
-            reply = intercom.submitEvent(up.user.user_id, up.user.email, "approved-pay", intercom_metadata)
-                                                     
-            if not reply:
-                ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
-                ph.save()
-        except Exception as e:
-            ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
-            ph.save()
-        """
         print 'CommerceGate callback: Sale'
 
         # POST to promiscuus
@@ -280,11 +249,11 @@ def callback_commercegate(request):
         payment_id = 'PH_%s_%d' % (user.user_id, int(time()))
 
         # Modificar fecha de user payment
-        up.user_payment = up.calc_payment_date()
+        up.payment_date = up.calc_payment_date(datetime.now())
         up.save()
 
         # Modificar fecha de expiracion del usuario
-        user.add_to_expiration(up.recurrence)
+        user.set_expiration(up.payment_date)
 
         # Obtengo integrador
         integrator = Integrator.get_by_country('commerce_gate', user.country)
@@ -292,23 +261,10 @@ def callback_commercegate(request):
         # Crear payment history
         ph = PaymentHistory.create(up, payment_id, integrator, status='A', gateway_id=transaction_id)
         
-        # Posteo en Intercom
-        """
-        intercom_metadata = {"integrator": "commerce_gate", "amount": ph.amount, "id": ph.gateway_id}
-        if user.expiration is not None:
-            intercom_metadata['expire_at'] = mktime(user.expiration.timetuple())
-        
-        
-        try:
-            reply = intercom.submitEvent(up.user.user_id, up.user.email, "approved-pay", intercom_metadata)
-                                                     
-            if not reply:
-                ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
-                ph.save()
-        except Exception as e:
-            ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
-            ph.save()
-        """
+        if up.is_trial:
+            up.trial_counter -= 1
+            up.save()
+
         print 'CommerceGate callback: Rebill'
 
         # POST to promiscuus
@@ -321,18 +277,6 @@ def callback_commercegate(request):
         up = UserPayment.objects.get(user=user, status='AC')
         up.cancel('U')
         
-        # Poster pago a Intercom
-        """
-        try:
-            reply = intercom.submitEvent(up.user.user_id, up.user.email, "cancelled-sub",
-                                     {"event_description": "recurrencia cancelada por el usuario"})
-            if not reply:
-                up.message = "Intercom error: cannot post the event"
-                up.save()
-        except Exception as e:
-            up.message = "Intercom error: %s" % str(e)
-            up.save()
-        """
         # POST to promiscuus
         resp_promiscuus = post_to_promiscuus(up, 'cancel')
         if resp_promiscuus['status'] == 'error':

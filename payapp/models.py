@@ -205,32 +205,9 @@ class User(models.Model):
         except MultipleObjectsReturned:
             return None
         return card
-    
-    def add_to_expiration(self, days):
-        ty, tm, td = timezone.now().strftime("%Y-%m-%d").split("-")
-        # Obtengo cantidad de meses a sumar
-        md = int(days / 30)
-        # Sumo los meses
-        m = int(tm) + md
-        # Obtengo el mes resultante y los anios a sumar
-        yd, month = divmod(m, 12)
-        if month == 0:
-            month = m - 12 * (yd - 1)
-            year = int(ty) + yd - 1
-        else:
-            year = int(ty) + yd
-        # Sumo los anio
-        self.expiration = datetime(year, month, int(td))
-        self.save()
-        return self.expiration
 
     def set_expiration(self, date):
         self.expiration = date + timedelta(days=1)
-        self.save()
-        return self.expiration
-        
-    def enable_for(self, days):
-        self.expiration = timezone.now() + timedelta(days=int(days))
         self.save()
         return self.expiration
 
@@ -293,6 +270,9 @@ class UserPayment(models.Model):
     channel           = models.CharField(max_length=1, choices=CHANNEL, default='E', help_text='Error or cancellation channel')
     message           = models.CharField(max_length=1024, blank=True)
     retries           = models.IntegerField(default=0, help_text='Payment retries')
+    trial_amount      = models.FloatField(default=0)
+    trial_recurrence  = models.IntegerField(default=0)
+    trial_counter     = models.IntegerField(default=0)
     internal          = models.BooleanField(default=True)
     enabled           = models.BooleanField(default=True)
     enabled_card      = models.BooleanField(default=False)
@@ -302,6 +282,14 @@ class UserPayment(models.Model):
     def __unicode__(self):
         return self.user_payment_id
     
+    @property
+    def is_trial(self):
+        return True if self.trial_counter > 0 else False
+
+    @property
+    def has_discount(self):
+        return True if self.disc_counter > 0 else False
+
     @classmethod
     def create(cls, user, recurrence, amount=0, currency=None, payment_date=0, payday=0, discount=0, disc_counter=0, internal=False):
         up = cls()
@@ -324,7 +312,34 @@ class UserPayment(models.Model):
         up.enabled_card = False
         up.save()
         return up
-        
+
+    @classmethod
+    def create_from_package(cls, user, package, payment_date=0, discount=0, disc_counter=0, internal=False):
+        up = cls()
+        up.user_payment_id = "UP_%s_%d" % (user.user_id, int(time.time()))
+        up.user            = user
+        up.amount          = package.amount
+        up.currency        = package.integrator.country.currency
+        if payment_date == 0 or payment_date == 0.0 or payment_date == '0':
+            up.payment_date = timezone.now()
+            up.status       = 'PE'
+        else:
+            up.payment_date = datetime.fromtimestamp(int(payment_date))
+            up.status       = 'AC'
+        up.recurrence   = package.duration
+        up.disc_pct     = int(discount)
+        up.disc_counter = int(disc_counter)
+        up.internal     = internal
+        up.enabled      = True
+        up.enabled_card = False
+        if package.trial_enabled:
+            up.trial_amount = package.trial_amount
+            up.trial_recurrence = package.trial_duration
+            up.trial_counter = package.trial_counter
+        up.save()
+        return up
+
+
     @classmethod
     def get_by_id(cls, up_id):
         try:
@@ -444,25 +459,29 @@ class UserPayment(models.Model):
             
     def calc_payment_date(self, date=None):
         if date is None:
-            date = self.payment_date
-        else:
-            self.payday = self.payday_calc(date)
-            self.save()            
-        # Obtengo cantidad de meses a sumar
-        md = int(int(self.recurrence) / 30)
-        # Sumo los meses
-        m = date.month + md
+            date = self.payment_date        
+      
+        recurrence = self.trial_recurrence if self.is_trial else self.recurrence
+    
+        # Obtengo la cantidad de meses y de dias a sumar
+        md, dd = divmod(recurrence, 30)
+        
+        # Sumo la cantidad de dias y de meses
+        tm = date.month + md
+
         # Obtengo el mes resultante y los anios a sumar
-        yd, month = divmod(m, 12)
+        yd, month = divmod(tm, 12)
         if month == 0:
-            month = m - 12 * (yd - 1)
+            month = tm - 12 * (yd - 1)
             year = date.year + yd - 1
         else:
             year = date.year + yd
-        # Sumo los anio
-        self.payment_date = datetime(year, month, int(self.payday))
-        #self.save()
-        return self.payment_date
+        
+        # Calculo el total de dias a sumar
+        days = date.day + dd - 1
+    
+        return datetime(year, month, 1) + timedelta(days=days)
+
         
     def add_retry(self):
         self.retries = self.retries + 1
@@ -556,16 +575,22 @@ class PaymentHistory(models.Model):
     message           = models.CharField(max_length=2048, blank=True)
     integrator        = models.ForeignKey(Integrator, blank=True, null=True)
     manual            = models.BooleanField(default=False, help_text='True if manual payment')
+    trial             = models.BooleanField(default=False, help_text='True if is trial')
     creation_date     = models.DateTimeField(auto_now_add=True)
     modification_date = models.DateTimeField(auto_now=True, blank=True, null=True)
 
     def __unicode__(self):
         return self.payment_id
 
-    def __amounts_calculator(self, amount):
-        # Si el monto es aplicado manualmente no aplico descuento
+    def __amounts_calculator(self, amount, trial):
+        # Verifico que el monto no sea aplicado manualmente
         if amount is None:
-            amount = self.user_payment.calculate_discount()        
+            # Si es un trial, no aplico descuento
+            if trial:
+                amount = self.user_payment.trial_amount
+            # Si no es manual y ni trial, aplico descuento
+            else:
+                amount = self.user_payment.calculate_discount()       
         tax = self.user_payment.user.country.tax
 
         if tax > 0:
@@ -602,9 +627,10 @@ class PaymentHistory(models.Model):
     def create(cls, user_payment, payment_id, integrator, card=None, disc_pct=0, manual=False, gateway_id='', status='P', amount=None):
         ph = cls()
         ph.user_payment   = user_payment
-        amounts = ph.__amounts_calculator(amount)
-        # Si el monto es ingresado manualmente no aplico el descuento
-        if amount is not None:
+        trial = user_payment.is_trial
+        amounts = ph.__amounts_calculator(amount, trial)
+        # Si el monto es ingresado manualmente o es trial, no aplico el descuento 
+        if amount is not None or trial:
             disc_pct = 0
 
         ph.card           = card
@@ -617,6 +643,7 @@ class PaymentHistory(models.Model):
         ph.disc_pct       = disc_pct
         ph.integrator     = integrator
         ph.manual         = manual
+        ph.trial          = trial
         ph.save()
         return ph
 
@@ -649,11 +676,15 @@ class PaymentHistory(models.Model):
 
 
 class Package(models.Model):
-    package_id = models.CharField(max_length=10)
-    duration   = models.IntegerField()
-    amount     = models.FloatField()
-    integrator = models.ForeignKey(Integrator)
-    enabled    = models.BooleanField(default=False)
+    package_id     = models.CharField(max_length=32)
+    duration       = models.IntegerField()
+    amount         = models.FloatField()
+    integrator     = models.ForeignKey(Integrator)
+    trial_enabled  = models.BooleanField(default=False)
+    trial_amount   = models.FloatField(default=0)
+    trial_duration = models.IntegerField(default=0)
+    trial_counter  = models.IntegerField(default=0)
+    enabled        = models.BooleanField(default=False)
 
     @classmethod
     def get(cls, duration, integrator):
@@ -662,6 +693,13 @@ class Package(models.Model):
         except ObjectDoesNotExist:
             return None
         except MultipleObjectsReturned:
+            return None
+
+    @classmethod
+    def get_by_id(cls, package_id, integrator):
+        try:
+            return cls.objects.get(package_id=package_id, integrator=integrator, enabled=True)
+        except ObjectDoesNotExist:
             return None
 
     @classmethod

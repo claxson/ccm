@@ -98,15 +98,11 @@ def paymentez_translator(content):
     ret["up_status"]     = data["up_status"]
     ret["up_message"]    = content["transaction"]["message"]
     ret["up_recurrence"] = data["up_recurrence"]
-
     ret["ph_status"]    = data["ph_status"]
     ret["ph_gatewayid"] = content["transaction"]["id"]
     ret["ph_message"]   = content
-
     ret["user_expire"]  = data["expire_user"]
-
     ret["user_message"] = data["user_msg"]
-
     ret["intercom"]     = data["intercom"]
 
     return ret
@@ -176,7 +172,6 @@ def pagodigital_translator(content):
         ret["up_message"] = ""
 
     ret["up_recurrence"] = data["up_recurrence"]
-
     ret["ph_status"]    = data["ph_status"]
 
     if "ID_REFERENCIA" in content:
@@ -185,13 +180,9 @@ def pagodigital_translator(content):
         ret["ph_gatewayid"] = ""
         
     ret["ph_message"]   = content
-
     ret["user_expire"]  = data["expire_user"]
-
     ret["user_message"] = data["user_msg"]
-
     ret["intercom"]     = data["intercom"]
-
     return ret
 
 
@@ -234,7 +225,8 @@ def post_to_promiscuus(obj, event):
                                         is_suscription=True,
                                         access_until=access_until,
                                         status=PH_STATUS[obj.status],
-                                        message=obj.user_payment.message)                                  
+                                        message=obj.user_payment.message,
+                                        trial=obj.trial)                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -253,7 +245,8 @@ def post_to_promiscuus(obj, event):
                                 rebill_type=rebill_type,
                                 access_until=access_until,
                                 status=PH_STATUS[obj.status],
-                                message=obj.user_payment.message)                                  
+                                message=obj.user_payment.message,
+                                trial=obj.trial)                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -286,18 +279,26 @@ def paymentez_payment(up, card, logging, manual, amount):
         logging.error("paymentez_payment(): %s" % msg)
         return False
 
-    # Aplico descuento si corresponde
-    disc_flag = False
-    if up.disc_counter > 0:
-        disc_flag = True
-        disc_pct  = up.disc_pct
-        logging.info("paymentez_payment(): Calculating discount.")
-    else:
+    # Verifico si es trial y aplico descuento si corresponde
+    if up.is_trial:
+        trial_flag = True
+        disc_flag = False
         disc_pct = 0
+        logging.info("paymentez_payment(): Trial Enabled.")
+    else:
+        trial_flag = False 
+        if up.has_discount:
+            disc_flag = True
+            disc_pct = up.disc_pct
+            logging.info("paymentez_payment(): Discount enabled.")
+        else:
+            disc_pct = 0
+            disc_flag = False
+
 
     # Genero tx id sumando al userid el timestamp
     payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
-    print(amount)
+    
     # Creo el registro en PaymentHistory
     ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual, '', 'P', amount)    
     logging.info("paymentez_payment(): Payment history created. ID: %s" % ph.payment_id)
@@ -324,7 +325,6 @@ def paymentez_payment(up, card, logging, manual, amount):
     else:
         resp = True
         content = {'transaction': {'status_detail':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}}
-        #pr  = paymentez_translator(content)
     
     if resp:
         # Obtengo los valores segun la respuesta de Paymentez
@@ -348,8 +348,11 @@ def paymentez_payment(up, card, logging, manual, amount):
             # Fija la fecha de expiration del usuario
             logging.info("paymentez_payment(): New user expiration %d for user %s" % (up.recurrence, up.user.user_id))
             up.user.set_expiration(up.payment_date)
+            # Descuento contadores si corresponde
             if disc_flag:
-                up.disc_counter = up.disc_counter - 1
+                up.disc_counter -= 1
+            if trial_flag:
+                up.trial_counter -= 1
             up.retries = 0
             ret = True
         else:
@@ -377,28 +380,6 @@ def paymentez_payment(up, card, logging, manual, amount):
             logging.info("paymentez_payment(): Disabling user access to %s" % up.user.user_id)
             up.user.expire()
 
-        """
-        if pr["intercom"]["action"]:
-            logging.info("paymentez_payment(): Sending event to Intercom: %s" % pr["intercom"]["event"])
-            ep = Setting.get_var('intercom_endpoint')
-            token = Setting.get_var('intercom_token')
-            if up.user.expiration is not None:
-                content['transaction']['expire_at'] = str(int(mktime(up.user.expiration.timetuple())))
-            try:
-                intercom = Intercom(ep, token)
-                reply = intercom.submitEvent(up.user.user_id, up.user.email, pr["intercom"]["event"],
-                                             paymentez_intercom_metadata(content['transaction']))
-                if not reply:
-                    msg = "Intercom error: cannot post the event"
-                    ph.message = "%s - %s" % (ph.message, msg)
-                    logging.info("paymentez_payment(): %s" % msg)
-                    ph.save()
-            except Exception as e:
-                msg = "Intercom error: %s" % str(e)
-                ph.message = "%s - %s" % (ph.message, msg)
-                logging.info("paymentez_payment(): %s" % msg)
-                ph.save()     
-        """
 
         # POST to Promiscuus
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
@@ -435,14 +416,21 @@ def paymentez_payment(up, card, logging, manual, amount):
 
         
 def pagodigital_payment(up, card, logging, manual, amount):
-    # Aplico descuento si corresponde
-    disc_flag = False
-    if up.disc_counter > 0:
-        disc_flag = True
-        disc_pct  = up.disc_pct
-        logging.info("pagodigital_payment(): Calculating discount.")
-    else:
+    # Verifico si es trial y aplico descuento si corresponde
+    if up.is_trial:
+        trial_flag = True
+        disc_flag = False
         disc_pct = 0
+        logging.info("pagodigital_payment(): Trial Enabled.")
+    else:
+        trial_flag = False 
+        if up.has_discount:
+            disc_flag = True
+            disc_pct = up.disc_pct
+            logging.info("pagodigital_payment(): Discount enabled.")
+        else:
+            disc_pct = 0
+            disc_flag = False
         
     # Genero tx id sumando al userid el timestamp
     payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
@@ -527,8 +515,11 @@ def pagodigital_payment(up, card, logging, manual, amount):
             # Fija la fecha de expiration del usuario
             logging.info("pagodigital_payment(): New user expiration %d for user %s" % (up.recurrence, up.user.user_id))
             up.user.set_expiration(up.payment_date)
+            # Descuento contadores si corresponde
             if disc_flag:
-                up.disc_counter = up.disc_counter - 1
+                up.disc_counter -= 1
+            if trial_flag:
+                up.trial_counter -= 1
             up.retries = 0
             ret = True
         else:
@@ -554,16 +545,6 @@ def pagodigital_payment(up, card, logging, manual, amount):
 
         if pr["user_expire"]:
             user.expire()
-            
-        # Posteo en intercomo si es requerido
-        """
-        if pr["intercom"]["action"]:
-            logging.info("pagodigital_payment(): Sending event to Intercom: %s" % pr["intercom"]["event"])
-            content['amount'] = ph.amount
-            if up.user.expiration is not None:
-                content['expire_at'] = mktime(up.user.expiration.timetuple())
-            ph = post_to_intercom(ph, pr["intercom"]["event"], pagodigital_intercom_metadata(content))               
-        """
 
         # POST to Promiscuus
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)

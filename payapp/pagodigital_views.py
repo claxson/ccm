@@ -138,25 +138,20 @@ def payment_pagodigital(request):
             up.status = 'PE'
             up.save()
     
-    # Obtengo el packete en base a la duracion
-    package = Package.get(data['recurrence'], integrator)
+    # Obtengo el paquete
+    if 'package_id' in data:
+        package = Package.get_by_id(data['package_id'], integrator)
+    else:
+        package = Package.get(data['recurrence'], integrator)
+        
     if package is None:
         message = "package not found with that duration"
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
-        
+
     # Creo UserPayment
-    payday = __payday_calc(data['payment_date'])
-    up = UserPayment.create(user, 
-                            package.duration,
-                            package.amount,
-                            integrator.country.currency,
-                            data['payment_date'],
-                            payday,
-                            0,
-                            0,
-                            True)
+    up = UserPayment.create_from_package(user, package, data['payment_date'], 0, 0, True)
 
     # Aplico descuento si existe
     if 'discount' in data and 'disc_counter' in data:
@@ -296,13 +291,19 @@ def userpayment_form_pagodigital(request):
             card_exp = "%s/%s" % (data['cc_exp_month'], data['cc_exp_year'][-2:])
             card = Card.create_with_token(user, content['TOKEN'], data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
         
-        # Aplico descuento si corresponde
-        disc_flag = False
-        if up.disc_counter > 0:
-            disc_flag = True
-            disc_pct = up.disc_pct
-        else:
+        # Verifico si es trial y aplico descuento si corresponde
+        if up.is_trial:
+            trial_flag = True
+            disc_flag = False
             disc_pct = 0
+        else:
+            trial_flag = False 
+            if up.has_discount:
+                disc_flag = True
+                disc_pct = up.disc_pct
+            else:
+                disc_pct = 0
+                disc_flag = False
 
         # Genero tx id sumando al userid el timestamp
         payment_id = "PH_%s_%d" % (user.user_id, int(time()))
@@ -343,7 +344,9 @@ def userpayment_form_pagodigital(request):
                 # Fija la fecha de expiration del usuario
                 user.set_expiration(up.payment_date)
                 if disc_flag:
-                    up.disc_counter = up.disc_counter - 1
+                    up.disc_counter -= 1
+                if trial_flag:
+                    up.trial_counter -= 1
             else:
                 up.channel = 'R'
             up.save()            
@@ -361,15 +364,6 @@ def userpayment_form_pagodigital(request):
 
             if pr["user_expire"]:
                 user.expire()
-                
-            # Posteo en intercomo si es requerido
-            """
-            if pr["intercom"]["action"]:
-                content['amount'] = ph.amount
-                if user.expiration is not None:
-                    content['expire_at'] = mktime(user.expiration.timetuple())
-                post_to_intercom(ph, pr["intercom"]["event"], pagodigital_intercom_metadata(content))               
-            """
 
             # POST to promiscuus
             resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
@@ -412,7 +406,7 @@ def userpayment_form_pagodigital(request):
             
             
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#                     Devuelve JSON con URL de formular para agregar tarjeta                                 #
+#                     Devuelve JSON con URL del formulario para agregar tarjeta                                 #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Parametros: user_id                                                                                        #
 # Retorno: url                                                                                               #

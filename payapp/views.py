@@ -21,6 +21,7 @@ from models import Currency
 from models import Integrator
 from models import Country
 from models import IntegratorSetting
+from models import Package
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Misc
@@ -212,30 +213,34 @@ def create_payment(request):
         body = {'status': 'error', 'message': message, 'user_message': user_message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
 
-    # Creo un nuevo pago recurrente.
+    # Obtengo el paquete
+    if 'package_id' in data:
+        package = Package.get_by_id(data['package_id'], integrator)
+    else:
+        package = Package.get(data['recurrence'], integrator)
+
+    if package is None:
+        user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
+        message = "error getting package for %s_%s with id %d" % (integrator.name, country.code, int(data['recurrence']))
+        body = {'status': 'error', 'message': message, 'user_message': user_message}
+        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+
+    # Creo un nuevo pago recurrente 
     try:
-        # Revisar si tiene o no descuento.
-        payday = __payday_calc(data['payment_date'])
         if 'discount' in data and 'disc_counter' in data:
-            up = UserPayment.create(user, 
-                                    data['recurrence'],
-                                    data['amount'],
-                                    currency,
-                                    data['payment_date'],
-                                    payday,
-                                    data['discount'],
-                                    data['disc_counter'],
-                                    True)
+            up = UserPayment.create_from_package(user, 
+                                                 package,                                                 
+                                                 data['payment_date'],
+                                                 data['discount'],
+                                                 data['disc_counter'],
+                                                 True)
         else:
-            up = UserPayment.create(user,
-                                    data['recurrence'],
-                                    data['amount'],
-                                    currency,
-                                    data['payment_date'],
-                                    payday,
-                                    0,
-                                    0,
-                                    True)
+            up = UserPayment.create_from_package(user,
+                                                 package,                                    
+                                                 data['payment_date'],
+                                                 0,
+                                                 0,
+                                                 True)
     except Exception as e:
         user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
         message = "could not create user payment: (%s)" % str(e)
@@ -256,13 +261,20 @@ def create_payment(request):
                 body = {'status': 'error', 'message': message, 'user_message': user_message}
                 return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
 
-            # Aplico descuento si corresponde
-            disc_flag = False
-            if up.disc_counter > 0:
-                disc_flag = True
-                disc_pct = up.disc_pct
-            else:
+            # Verifico si es trial y aplico descuento si corresponde
+            if up.is_trial:
+                trial_flag = True
+                disc_flag = False
                 disc_pct = 0
+            else:
+                trial_flag = False 
+                if up.has_discount:
+                    disc_flag = True
+                    disc_pct = up.disc_pct
+                else:
+                    disc_pct = 0
+                    disc_flag = False
+
 
             # Genero tx id sumando al userid el timestamp
             payment_id = "PH_%s_%d" % (user.user_id, int(time()))
@@ -303,7 +315,9 @@ def create_payment(request):
                     # Fija la fecha de expiration del usuario
                     user.set_expiration(up.payment_date)
                     if disc_flag:
-                        up.disc_counter = up.disc_counter - 1
+                        up.disc_counter -= 1
+                    if trial_flag:
+                        up.trial_counter -= 1
                 else:
                     up.channel = 'R'
                 up.save()
@@ -321,24 +335,6 @@ def create_payment(request):
 
                 if pr["user_expire"]:
                     user.expire()
-
-                """
-                if pr["intercom"]["action"]:
-                    ep    = Setting.get_var('intercom_endpoint')
-                    token = Setting.get_var('intercom_token')
-                    if user.expiration is not None:
-                        content['transaction']['expire_at'] = mktime(user.expiration.timetuple())
-                    try:
-                        intercom = Intercom(ep, token)
-                        reply = intercom.submitEvent(up.user.user_id, up.user.email, pr["intercom"]["event"],
-                                                     paymentez_intercom_metadata(content['transaction']))
-                        if not reply:
-                            ph.message = "%s - Intercom error: cannot post the event" % (ph.message)
-                            ph.save()
-                    except Exception as e:
-                        ph.message = "%s - Intercom error: %s" % (ph.message, str(e))
-                        ph.save()                
-                """
 
                 # POST to promiscuus
                 resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
@@ -439,14 +435,6 @@ def payment_discount(request):
         message = "user_id %s has not enabled recurring payment" % user_id
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
-
-    """    
-    # Devuelvo error si existe algun descuento activo
-    if up.disc_counter > 0:
-        message = "discount already active"
-        body = {'status': 'error', 'message': message}
-        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
-    """
     
     # Aplico el descuento
     try:
@@ -514,22 +502,6 @@ def cancel_payment(request):
         message = "could not disable recurring payment"
         body = {'status': 'error', 'message': message}
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)
-
-    # Envio envento a intercom
-    """
-    ep    = Setting.get_var('intercom_endpoint')
-    token = Setting.get_var('intercom_token')
-    try:
-        intercom = Intercom(ep, token)
-        reply = intercom.submitEvent(up.user.user_id, up.user.email, "cancelled-sub",
-                                     {"event_description": "recurrencia cancelada por el usuario"})
-        if not reply:
-            up.message = "Intercom error: cannot post the event"
-            up.save()
-    except Exception as e:
-        up.message = "Intercom error: %s" % str(e)
-        up.save()
-    """
 
     # POST to promiscuus
     resp_promiscuus = post_to_promiscuus(up, 'cancel')
@@ -748,12 +720,15 @@ def user_status(request, user_id):
     ret['status']   = 'A'
     ret['message']  = ''
     ret['status_detail'] = up.status
-    ret['recurrence']   = up.recurrence
-    ret['payment_date'] = mktime(up.payment_date.timetuple())
-    ret['currency']     = up.currency.code
-    ret['amount']       = up.amount
-    ret['discount']     = up.disc_pct
-    ret['disc_counter'] = up.disc_counter
+    ret['recurrence']    = up.recurrence
+    ret['payment_date']  = mktime(up.payment_date.timetuple())
+    ret['currency']      = up.currency.code
+    ret['amount']        = up.amount
+    ret['discount']      = up.disc_pct
+    ret['disc_counter']  = up.disc_counter
+    ret['trial_amount']  = up.trial_amount
+    ret['trial_counter'] = up.trial_counter
+    ret['trial_recurrence'] = up.trial_recurrence
 
     integrator = up.get_integrator()
     if integrator is not None:

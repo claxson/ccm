@@ -701,20 +701,6 @@ def expireuser(request):
                 user.expiration = fecha
                 user.save()
 
-                # Envio envento a intercom
-                """
-                ep = Setting.get_var('intercom_endpoint')
-                token = Setting.get_var('intercom_token')
-                try:
-                    intercom = Intercom(ep, token)
-                    metadata = {"event_description": "usuario expirado por el administrador", "expire_at": str(
-                        int(mktime(user.expiration.timetuple())))}
-                    reply = intercom.submitEvent(
-                        user.user_id, user.email, "user_expired", metadata)
-                except Exception as e:
-                    pass
-                """
-
                 return JsonResponse({'message': 'Guardado correctamente', 'data': fecha}, status=200)
             except Exception as e:
                 return JsonResponse({'message': 'Hubo un error', 'data': e.message}, status=500)
@@ -733,23 +719,6 @@ def activateuser(request):
 
                 # Sumar la cantidad de dias a hoy
                 date = user.enable_for(days)
-
-                # Envio evento a intercom
-                """
-                ep = Setting.get_var('intercom_endpoint')
-                token = Setting.get_var('intercom_token')
-
-                try:
-                    intercom = Intercom(ep, token)
-                    metadata = {
-                        'event_description': 'usuario activado por el administrador',
-                        'expire_at': str(int(mktime(date.timetuple())))
-                    }
-                    reply = intercom.submitEvent(
-                        user.user_id, user.email, 'user_activated', metadata)
-                except Exception as e:
-                    pass
-                """
 
                 return JsonResponse({'message': 'activado correctamente'}, status=200)
             except Exception as e:
@@ -791,23 +760,6 @@ def deleteuserpayment(request):
                     if resp_promiscuus['status'] == 'error':
                         registro.message = "%s - Promiscuus error: %s" % (up.message, resp_promiscuus['message'])
                         registro.save()
-
-                # Envio envento a Intercom
-                """
-                ep = Setting.get_var('intercom_endpoint')
-                token = Setting.get_var('intercom_token')
-
-                try:
-                    intercom = Intercom(ep, token)
-                    reply = intercom.submitEvent(registro.user.user_id, registro.user.email, "cancelled-sub",
-                                                 {"event_description": "recurrencia cancelada por el administrador"})
-                    if not reply:
-                        registro.message = "Intercom error: cannot post the event"
-                        registro.save()
-                except Exception as e:
-                    registro.message = "Intercom error: %s" % str(e)
-                    registro.save()
-                """
 
                 return JsonResponse({'message': 'activado correctamente'}, status=200)
             except Exception as e:
