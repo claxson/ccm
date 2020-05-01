@@ -163,7 +163,7 @@ class User(models.Model):
         if self.expiration is None:
             return False
         else:
-            return self.expiration > date.today()
+            return self.expiration >= date.today()
 
     def natural_key(self):
         return (self.user_id)
