@@ -64,21 +64,6 @@ def load_settings():
 
     return settings
 
-"""
-def get_card(user):
-    try:
-        card = Card.objects.get(user=user, enabled=True)
-    except ObjectDoesNotExist:
-        msg = "User %s has not card enabled" % user.user_id
-        logging.error("get_card(): %s" % msg)
-        return None
-    except MultipleObjectsReturned:
-        msg = "User %s has multiple cards enabled" % user.user_id
-        logging.error("get_card(): %s" % msg)
-        return None
-
-    return card
-"""
 
 def paymentez_callback_checker(integrator):
     timeout = IntegratorSetting.get_var(integrator, 'callback_timeout')
@@ -93,33 +78,6 @@ def paymentez_callback_checker(integrator):
             ph.message = "callback timeout error"
             ph.save()
 
-            """
-            logging.info("paymentez_callback_checker(): Sending event to Intercom: rejected-pay")
-            ep = Setting.get_var('intercom_endpoint')
-            token = Setting.get_var('intercom_token')
-            try:
-                metadata = {"integrator": "paymentez",
-                            "authorization_code": "",
-                            "id": "",
-                            "status_detail": "timeout",
-                            "amount": ""}
-                intercom = Intercom(ep, token)
-                reply = intercom.submitEvent(ph.user_payment.user.user_id,
-                                             ph.user_payment.user.email,
-                                             "rejected-pay",
-                                             metadata)
-
-                if not reply:
-                    msg = "Intercom error: cannot post the event"
-                    ph.message = "%s - %s" % (ph.message, msg)
-                    logging.info("paymentez_callback_checker(): %s" % msg)
-                    ph.save()
-            except Exception as e:
-                msg = "Intercom error: %s" % str(e)
-                ph.message = "%s - %s" % (ph.message, msg)
-                logging.info("paymentez_callback_checker(): %s" % msg)
-                ph.save()
-            """
 
 def payd_main():
     logging.basicConfig(format   = '%(asctime)s - payd.py -[%(levelname)s]: %(message)s',
@@ -133,7 +91,7 @@ def payd_main():
     while True:
         # Obtengo todos los UserPayments activos y habilitados con payment_date vencido.
         logging.info("payd_main(): Getting active UserPayemnts to pay...")
-        payments = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lte=timezone.now(), internal=True)
+        payments = UserPayment.objects.filter(status='AC', enabled=True, payment_date__lt=timezone.now(), internal=True)
         ips = Setting.get_var("payment_slot")
         for up in payments:
             if ips > 0:

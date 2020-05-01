@@ -107,6 +107,7 @@ def payment_pagodigital(request):
     # Cargo el JSON
     try:
         data = json.loads(request.body)
+        print "CONTENT MA: %s" % data
     except Exception:
         message = 'error decoding json'
         body = { 'status': 'error', 'message': message }
