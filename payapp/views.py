@@ -337,6 +337,10 @@ def create_payment(request):
                     user.expire()
 
                 # POST to promiscuus
+                if ph.trial:
+                    ph.trial_duration = up.trial_recurrence
+                else:
+                    ph.trial_duration = 0
                 resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
                 if resp_promiscuus['status'] == 'error':
                     ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
@@ -354,6 +358,10 @@ def create_payment(request):
                 user_message = "Ocurrió un error con el pago, por favor reintente nuevamente más tarde"
 
                 # POST to promiscuus
+                if ph.trial:
+                    ph.trial_duration = up.trial_recurrence
+                else:
+                    ph.trial_duration = 0
                 resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
                 if resp_promiscuus['status'] == 'error':
                     ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])

@@ -144,6 +144,10 @@ def __callback_paymentez_proc(data, country):
 
         # POST to promiscuus
         if ph.user_payment.status == 'AC':
+            if ph.trial:
+                ph.trial_duration = ph.user_payment.trial_recurrence
+            else:
+                ph.trial_duration = 0
             resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
             if resp_promiscuus['status'] == 'error':
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
@@ -239,6 +243,10 @@ def callback_commercegate(request):
         print 'CommerceGate callback: Sale'
 
         # POST to promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
         if resp_promiscuus['status'] == 'error':
             ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
@@ -268,6 +276,10 @@ def callback_commercegate(request):
         print 'CommerceGate callback: Rebill'
 
         # POST to promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, 'rebill')
         if resp_promiscuus['status'] == 'error':
             ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])

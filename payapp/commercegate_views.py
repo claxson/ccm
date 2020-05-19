@@ -265,6 +265,10 @@ def error_commercegate(request, user_payment_id):
             ph.reject('', message)
 
             # POST to promiscuus
+            if ph.trial:
+                ph.trial_duration = up.trial_recurrence
+            else:
+                ph.trial_duration = 0
             resp_promiscuus = post_to_promiscuus(ph, 'payment_commit')
             if resp_promiscuus['status'] == 'error':
                 ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])

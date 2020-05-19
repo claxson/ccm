@@ -226,7 +226,8 @@ def post_to_promiscuus(obj, event):
                                         access_until=access_until,
                                         status=PH_STATUS[obj.status],
                                         message=obj.user_payment.message,
-                                        trial=obj.trial)                                  
+                                        trial=obj.trial,
+                                        trial_duration=obj.trial_duration)                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -246,7 +247,8 @@ def post_to_promiscuus(obj, event):
                                 access_until=access_until,
                                 status=PH_STATUS[obj.status],
                                 message=obj.user_payment.message,
-                                trial=obj.trial)                                  
+                                trial=obj.trial,
+                                trial_duration=obj.trial_duration)                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -382,6 +384,10 @@ def paymentez_payment(up, card, logging, manual, amount):
 
 
         # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
         if resp_promiscuus['status'] == 'error':
             logging.info("paymentez_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
@@ -404,6 +410,10 @@ def paymentez_payment(up, card, logging, manual, amount):
         ph.error('', content)
 
         # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
         if resp_promiscuus['status'] == 'error':
             logging.info("paymentez_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
@@ -547,6 +557,10 @@ def pagodigital_payment(up, card, logging, manual, amount):
             user.expire()
 
         # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
         if resp_promiscuus['status'] == 'error':
             logging.info("pagodigital_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
@@ -568,6 +582,10 @@ def pagodigital_payment(up, card, logging, manual, amount):
         ph.error('', content)
 
         # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
         resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
         if resp_promiscuus['status'] == 'error':
             logging.info("pagodigital_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
