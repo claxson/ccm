@@ -353,6 +353,13 @@ class UserPayment(models.Model):
             return cls.objects.get(user=user, enabled=True, status='AC')
         except ObjectDoesNotExist:
             return None
+
+    @classmethod
+    def get_rebill_error(cls, user):
+        try:
+            return cls.objects.get(user=user, status='RE')
+        except ObjectDoesNotExist:
+            return None
             
     @classmethod
     def get_enabled(cls, user):

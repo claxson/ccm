@@ -440,9 +440,11 @@ def payment_discount(request):
     # Obtengo el UserPayment y si no existe devulvo error
     up = UserPayment.get_active(user=user)
     if up is None:
-        message = "user_id %s has not enabled recurring payment" % user_id
-        body = {'status': 'error', 'message': message}
-        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+        up = UserPayment.get_rebill_error(user=user)
+        if up is None:
+            message = "user_id %s has not enabled recurring payment" % user_id
+            body = {'status': 'error', 'message': message}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
     # Aplico el descuento
     try:
@@ -492,9 +494,11 @@ def cancel_payment(request):
     # Obtengo el UserPayment activo y si no existe devulvo error
     up = UserPayment.get_active(user=user)
     if up is None:
-        message = "user_id %s has not enabled recurring payment" % data['user_id']
-        body = {'status': 'error', 'message': message}
-        return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
+        up = UserPayment.get_rebill_error(user=user)
+        if up is None:
+            message = "user_id %s has not enabled recurring payment" % data['user_id']
+            body = {'status': 'error', 'message': message}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
     # Si el integrador es CommerceGate ejecuto baja para ese integrador
     # ph = PaymentHistory.objects.filter(user_payment=up).order_by('-id')[0]
@@ -721,9 +725,10 @@ def user_status(request, user_id):
             ret['status_detail'] = up.status
         else:
             ret['status_detail'] = 'ER'
-        ret['status']  = 'E'
-        body = {'status': 'success', 'value': ret}
-        return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
+        if not up.status == 'RE':
+            ret['status']  = 'E'
+            body = {'status': 'success', 'value': ret}
+            return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
     
     ret['status']   = 'A'
     ret['message']  = ''
