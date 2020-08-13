@@ -12,6 +12,8 @@ from payapp.callback_views import callback_paymentez, callback_commercegate
 
 from payapp.pagodigital_views import payment_pagodigital, userpayment_form_pagodigital, add_card_pagodigital, add_card_form_pagodigital
 
+from payapp.prisma_views import payment_prisma_view, userpayment_form_prisma_view, add_card_prisma_view, add_card_form_prisma
+
 urlpatterns = [
 
     url(r'^admin/', admin.site.urls),
@@ -38,6 +40,12 @@ urlpatterns = [
     url(r'^api/v1/pagodigital/userpayment/form', userpayment_form_pagodigital),
     url(r'^api/v1/pagodigital/set/addcard', add_card_pagodigital),
     url(r'^api/v1/pagodigital/addcard/form', add_card_form_pagodigital),
+
+    # Prisma
+    url(r'^api/v1/prisma/set/payment', payment_prisma_view),
+    url(r'^api/v1/prisma/userpayment/form', userpayment_form_prisma_view),
+    url(r'^api/v1/prisma/set/addcard', add_card_prisma_view),
+    url(r'^api/v1/prisma/addcard/form', add_card_form_prisma),
 
     url(r'^api/v1/api/users/(?P<user_id>[\w\-]+)', get_user),
     url(r'^api/v1/api/users', get_all_users),

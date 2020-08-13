@@ -8,6 +8,7 @@ from django.utils import timezone
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 from integrator_settings import PAYMENTEZ
 from integrator_settings import PAGODIGITAL
+from integrator_settings import PRISMA
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # App Model
@@ -21,14 +22,24 @@ from payapp.models import PaymentHistory
 from payapp.models import User
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# Misc
+# Paymentez
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 from payapp.paymentez import PaymentezGateway
 from payapp.paymentez import PaymentezTx
 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Pago Digital
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 from pagodigital import PagoDigitalGateway
 from pagodigital import PagoDigitalTx
 from pagodigital import PagoDigitalJWTGateway
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Prisma
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+from prisma import PrismaGateway
+from prisma import PrismaTx
+from prisma import PrismaPaymentToken
 
 #from payapp.intercom import Intercom
 
@@ -185,6 +196,55 @@ def pagodigital_translator(content):
     ret["intercom"]     = data["intercom"]
     return ret
 
+
+def prisma_translator(content):
+    ret = {}
+    if 'status' in content:
+        if content['status'] == 'approved':
+            code = "00"
+        elif content['status'] == 'rejected':
+            code = "-1"
+    else:
+        code = "-1"
+
+    data = PRISMA["codes"][code]
+
+    ret["up_status"] = data["up_status"]
+
+    if "status" in content:
+        if content["status"] == "approved":
+            ret["up_message"] = content["status"]
+        elif content["status"] == "rejected":
+            if "status_details" in content:
+                if "error" in content["status_details"] and "type" in content["status_details"]["error"]:
+                    ret["up_message"] = content["status_details"]["error"]["type"]
+            else:
+                ret["up_message"] = content["status_details"]
+        else:
+            ret["up_message"] = ''
+    else:
+        ret["up_message"] = ''
+
+
+    ret["up_recurrence"] = data["up_recurrence"]
+    ret["ph_status"]    = data["ph_status"]
+
+    if "id" in content:
+        ret["ph_gatewayid"] = content["id"]
+    else:
+        ret["ph_gatewayid"] = ""
+
+    ret["ph_message"]   = content
+    ret["user_expire"]  = data["expire_user"]
+    ret["user_message"] = data["user_msg"]
+    ret["intercom"]     = data["intercom"]
+    return ret
+
+def get_prisma_card_id(name):
+    if name in PRISMA["card_ids"]:
+        return PRISMA["card_ids"][name]
+    else: 
+        return None
 
 def post_to_intercom(ph, event, content):
     ep    = Setting.get_var('intercom_endpoint')
@@ -596,14 +656,203 @@ def pagodigital_payment(up, card, logging, manual, amount):
 
         return False
         
+
+def prisma_payment(up, card, logging, manual, amount):
+    # Verifico si es trial y aplico descuento si corresponde
+    if up.is_trial:
+        trial_flag = True
+        disc_flag = False
+        disc_pct = 0
+        logging.info("prisma_payment(): Trial Enabled.")
+    else:
+        trial_flag = False 
+        if up.has_discount:
+            disc_flag = True
+            disc_pct = up.disc_pct
+            logging.info("prisma_payment(): Discount enabled.")
+        else:
+            disc_pct = 0
+            disc_flag = False
+
+    # Genero tx id sumando al userid el timestamp
+    payment_id = "PH_%s_%d" % (up.user.user_id, int(time()))
+
+    # Creo el registro en PaymentHistory
+    ph = PaymentHistory.create(up, payment_id, card.integrator, card, disc_pct, manual, '', 'P', amount)    
+    logging.info("prisma_payment(): Payment history created. ID: %s" % ph.payment_id)
+
+    # Verico si es primer pago o rebill        
+    if PaymentHistory.objects.filter(user_payment=up).count() == 1:
+        promiscuus_event = 'payment_commit'            
+    else:
+        promiscuus_event = 'rebill'
+
+    # Realizo el pago si el monto a pagar es mayor a 0
+    if ph.amount > 0:
+        # Obtengo settings del integrator
+        public_apikey = IntegratorSetting.get_var(card.integrator, 'public_apikey')
+        private_apikey = IntegratorSetting.get_var(card.integrator, 'private_apikey')
+        success_url = IntegratorSetting.get_var(card.integrator, 'redirect_url_success')
+        failed_url = IntegratorSetting.get_var(card.integrator, 'redirect_url_failed')
+        endpoint = IntegratorSetting.get_var(card.integrator, 'endpoint')
+
+        # Obtengo el id de la tarjeta
+        payment_method_id = get_prisma_card_id(card.card_type)
+    
+        # Genero el gateway de pago
+        prisma_gw = PrismaGateway(endpoint, public_apikey, private_apikey)
+
+        # Obtengo nuevo Token de pago
+        payment_data = {'token': card.token, 'security_code': card.cvv} 
+        try:
+            ret, content = prisma_gw.get_recurrence_token(payment_data) 
+            if not ret:
+                message = json.dumps(content)
+                up.reply_error(message)
+                ph.error('', message)
+                logging.error(message)
+                return False
+            payment_token = content['id']
+        except Exception as e:
+            message = 'ERROR get_recurrence_token(): %s' % e
+            up.reply_error(message)
+            ph.error('', message)
+            logging.error("prisma_payment(): %s" % message)
+            return False
+
+        # Realizo pago
+        prisma_tx = PrismaTx(up.user.user_id, up.user.email, payment_id, payment_token, card.card_bin, int(ph.amount*100), payment_method_id)
+        try:
+            ret, content = prisma_gw.payment(prisma_tx.serialize())
+            if not ret:
+                message = json.dumps(content)
+                up.reply_error(message)
+                ph.error('', message)
+                logging.error(message)
+                return False
+            card_token = content['customer_token']
+        except Exception as e:
+            message = 'ERROR payment(): %s' % e
+            up.reply_error(message)
+            ph.error('', message)
+            logging.error("prisma_payment(): %s" % message)
+            return False
+    else:
+        ret = True
+        content = {'CODIGO_RESPUESTA':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}
+
+    if ret:
+        # Obtengo los valores segun la respuesta de Prisma
+        pr = prisma_translator(content) # Falta desarrollar prisma_translator()
         
+        # Seteo los valores de la UserPayment
+        logging.info("prisma_payment(): Setting PaymentHistory values: status: %s - gateway_id: %s - message: %s"
+                    % (pr["ph_status"], pr["ph_gatewayid"], pr["ph_message"]))
+
+        up.status  = pr["up_status"]
+        up.message = pr["up_message"]
+        up.enabled = pr["up_recurrence"]
+
+        if up.status == 'AC':
+            # calcular next_payment_day
+            if manual:
+                up.payment_date = up.calc_payment_date(timezone.now())
+            else:
+                up.payment_date = up.calc_payment_date()
+            # Fija la fecha de expiration del usuario
+            logging.info("prisma_payment(): New user expiration %d for user %s" % (up.recurrence, up.user.user_id))
+            up.user.set_expiration(up.payment_date)
+            # Descuento contadores si corresponde
+            if disc_flag:
+                up.disc_counter -= 1
+            if trial_flag:
+                up.trial_counter -= 1
+            up.retries = 0
+            ret = True
+        else:
+            if manual:
+                up.retries = up.retries + 1
+            else:
+                # Agregar N dias a expiration
+                delay = int(Setting.get_var('expiration_delay')) - 1
+                user_expiration = up.user.expiration + timedelta(days=delay)
+                up.user.set_expiration(user_expiration)
+            logging.info("prisma_payment(): Payment executed with errors - UserPayment: %s - PaymentHistory: %s" % (up.user_payment_id, payment_id))
+            up.channel = 'R'
+            ret = False
+        up.save()            
+
+        # Seteo los valores del PaymentHistory
+        logging.info("prisma_payment(): Setting PaymentHistory values: status: %s - gateway_id: %s - message: %s"
+                     % (pr["ph_status"], pr["ph_gatewayid"], pr["ph_message"]))
         
+        ph.status     = pr["ph_status"]
+        ph.gateway_id = pr["ph_gatewayid"]
+        ph.message    = pr["ph_message"]
+        ph.save()
+
+        if pr["user_expire"]:
+            user.expire()
+
+        # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
+        resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
+        if resp_promiscuus['status'] == 'error':
+            logging.info("prisma_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
+            ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+            ph.save()
+        else:
+            logging.info("prisma_payment(): Promiscuus event sent")
+
+        logging.info("prisma_payment(): Payment executed succesfully - UserPayment: %s" % up.user_payment_id)
+        return ret
+
+    else:
+        logging.info("prisma_payment(): Payment executed with errors - UserPayment: %s - PaymentHistory: %s" % (up.user_payment_id, payment_id))
+        message = json.dumps(content)
+
+        if manual:
+            up.add_retry()
+        up.reply_recurrence_error(message)
+        ph.error('', message)
+
+        # POST to Promiscuus
+        if ph.trial:
+            ph.trial_duration = up.trial_recurrence
+        else:
+            ph.trial_duration = 0
+        resp_promiscuus = post_to_promiscuus(ph, promiscuus_event)
+        if resp_promiscuus['status'] == 'error':
+            logging.info("prisma_payment(): Promiscuus error: %s" % resp_promiscuus['message'])
+            ph.message = "%s - Promiscuus error: %s" % (ph.message, resp_promiscuus['message'])
+            ph.save()
+        else:
+            logging.info("prisma_payment(): Promiscuus event sent")
+
+        return False
+
+
+       
+
+
+
+
+
+
+
+
 def make_payment(up, card, logging=None, manual=False, amount=None):
     if card.integrator.name == 'paymentez':
         ret = paymentez_payment(up, card, logging, manual, amount)
     elif card.integrator.name == 'pagodigital':
         ret = pagodigital_payment(up, card, logging, manual, amount)
+    elif card.integrator.name == 'prisma':
+        ret = prisma_payment(up, card, logging, manual, amount)
     else:
         ret = False
     return ret
+    
     

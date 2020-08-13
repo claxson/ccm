@@ -512,10 +512,11 @@ class Card(models.Model):
     card_id           = models.CharField(max_length=128)
     user              = models.ForeignKey(User)
     number            = models.CharField(max_length=64, blank=True)
+    card_bin          = models.CharField(max_length=6, blank=True)
     card_type         = models.CharField(max_length=128, blank=True)
     name              = models.CharField(max_length=128, blank=True)
     expiration        = models.CharField(max_length=5, blank=True, help_text="MM/AA")
-    cvc               = models.CharField(max_length=8, blank=True)
+    cvv               = models.CharField(max_length=8, blank=True)
     token             = models.CharField(max_length=256, blank=True)
     integrator        = models.ForeignKey(Integrator)
     enabled           = models.BooleanField(default=False)
@@ -527,7 +528,9 @@ class Card(models.Model):
         return self.card_id
     
     @classmethod
-    def create_with_token(cls, user, token, number, expiration, card_type, integrator):
+    def create_with_token(cls, user, token, number, expiration, card_type, integrator, cvv='', card_bin=''):
+        print("TOKEN")
+        print(token)
         cd            = cls()
         cd.card_id    = "CD_%s_%d" % (user.user_id, int(time.time()))
         cd.user       = user
@@ -536,6 +539,8 @@ class Card(models.Model):
         cd.expiration = expiration
         cd.card_type  = card_type
         cd.integrator = integrator
+        cd.cvv        = str(cvv)
+        cd.card_bin   = str(card_bin)
         cd.enabled    = True
         cd.save()
         return cd

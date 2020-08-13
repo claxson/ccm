@@ -340,4 +340,61 @@ PAGODIGITAL =  {"codes":
                              }
                         }    
                     }
+                }
+
+PRISMA = {"codes":
+            {"00":
+                {"description":"Aprobado",
+                "up_status":"AC",
+                "up_recurrence":True,
+                "ph_status":"A",
+                "user_msg":"Pago exitoso",
+                "expire_user":False,
+                "intercom":
+                    {"action": True,
+                    "event": "approved-pay"
+                    }
+                },
+            "51":
+                {"description":"Fondos insuficientes",
+                "up_status":"ER",
+                "up_recurrence":False,
+                "ph_status":"E",
+                "user_msg":"Ocurrió un error con el pago, por favor comuniquese con su banco y reintente nuevamente más tarde",
+                "expire_user":False,
+                "intercom":
+                    {"action": True,
+                    "event": "rejected-pay"
+                    }
+                },
+            "-1":{"description": "response error",
+                    "up_status": "ER",
+                    "up_recurrence": False,
+                    "ph_status": "E",
+                    "user_msg": "Ocurrió un error con el pago, por favor reintente nuevamente más tarde",
+                    "expire_user": False,
+                    "intercom":
+                        {"action": True,
+                        "event": "rejected-pay"
+                        }
+                },
+            "-10":
+                {"description":"Paid",
+                    "up_status":"AC",
+                    "up_recurrence":True,
+                    "ph_status":"A",
+                    "user_msg":"Pago exitoso con descuento del 100%",
+                    "expire_user":False,
+                    "intercom":
+                        {"action": True,
+                        "event": "approved-pay"
+                        }
                 }    
+            },
+            "card_ids":
+                {
+                    "visa": 1,
+                    "american_express": 65,
+                    "mastercard_prisma": 104
+                }
+         }    

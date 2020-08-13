@@ -5,12 +5,11 @@ from django.http import HttpResponse
 from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import render
 from django.views.decorators.clickjacking import xframe_options_exempt
+from django.utils import timezone
 
 import json
 from time import time
-from time import mktime
 from urllib import urlencode
-from datetime import datetime
 
 from models import User
 from models import UserPayment
@@ -23,15 +22,13 @@ from models import Setting
 from models import Form
 from models import Card
 
-from misc import pagodigital_translator
-from misc import unicodetoascii
+from misc import prisma_translator
+from misc import get_prisma_card_id
 from misc import post_to_promiscuus
 
-from pagodigital import PagoDigitalGateway
-from pagodigital import PagoDigitalCard
-from pagodigital import PagoDigitalTx
-from pagodigital import PagoDigitalJWTGateway
-
+from prisma import PrismaGateway
+from prisma import PrismaTx
+from prisma import PrismaPaymentToken
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Response Codes
@@ -46,8 +43,15 @@ http_UNAUTHORIZED         = 401
 http_PAYMENT_REQUIRED     = 402
 http_INTERNAL_ERROR       = 500
 
-SUCCESS_CODES = ['000', '002', '003', '004', '005', '006', '007', '008', '009',
-                 '00', '08', '11', '76', '77', '78', '79', '80', '81']
+
+def __check_apikey(request):
+    if 'HTTP_X_AUTH_CCM_KEY' in request.META:
+        if request.META['HTTP_X_AUTH_CCM_KEY'] == Setting.get_var('ma_apikey'):
+            return {'status': 'success'}
+        else:
+            return {'status': 'error'}
+    else:
+        return {'status': 'error'}
 
 
 def __validate_json(json_data, keys):
@@ -60,25 +64,6 @@ def __validate_json(json_data, keys):
             return {'status': 'error', 'message': message}
     return {'status': 'success'}
 
-    
-def __check_apikey(request):
-    if 'HTTP_X_AUTH_CCM_KEY' in request.META:
-        if request.META['HTTP_X_AUTH_CCM_KEY'] == Setting.get_var('ma_apikey'):
-            return {'status': 'success'}
-        else:
-            return {'status': 'error'}
-    else:
-        return {'status': 'error'}
-     
-     
-def __payday_calc(payment_date):
-    if payment_date == 0 or payment_date == 0.0 or payment_date == "0":
-        payment_date = time()
-    day = datetime.fromtimestamp(int(payment_date)).strftime('%d')
-    if int(day) > 28:
-        return 28
-    else:
-        return int(day)
 
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -90,11 +75,11 @@ def __payday_calc(payment_date):
 # Retorno: url                                                                                               #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @require_http_methods(["POST"])
-def payment_pagodigital(request):
+def payment_prisma_view(request):
     # Vars
-    integrator = Integrator.get('pagodigital')
+    integrator = Integrator.get('prisma')
     baseurl    = Setting.get_var('baseurl')
-    template   = 'pagodigital/pagodigital.html'
+    template   = 'prisma/prisma.html'
 
     # Verifico ApiKey
     cap = __check_apikey(request)
@@ -111,7 +96,7 @@ def payment_pagodigital(request):
         return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
 
     # Verifico las key mandatorias
-    keys = [ 'user_id', 'email', 'payment_date','recurrence' ]
+    keys = [ 'user_id', 'email', 'payment_date','package_id']
     json_loader = __validate_json(data, keys)
 
     if json_loader['status'] == 'error':
@@ -137,17 +122,13 @@ def payment_pagodigital(request):
             up.save()
     
     # Obtengo el paquete
-    if 'package_id' in data:
-        package = Package.get_by_id(data['package_id'], integrator)
-    else:
-        package = Package.get(data['recurrence'], integrator)
-        
+    package = Package.get_by_id(data['package_id'], integrator)
+            
     if package is None:
         message = "package not found with that duration"
         body = { 'status': 'error', 'message': message }
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_BAD_REQUEST)
     
-
     # Creo UserPayment
     up = UserPayment.create_from_package(user, package, data['payment_date'], 0, 0, True)
 
@@ -163,39 +144,44 @@ def payment_pagodigital(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)        
         
     iframe_params = { 'user_id': user.user_id, 'token': form.token }
-    iframe_url    = '%sapi/v1/pagodigital/userpayment/form/?%s' % (baseurl, urlencode(iframe_params))
+    iframe_url    = '%sapi/v1/prisma/userpayment/form/?%s' % (baseurl, urlencode(iframe_params))
     body = { 'status': 'success', 'value': { 'url': iframe_url } }
 
     return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
-    
-    
-    
+
+
+
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                                Crea el UserPayment y realiza el addcard y pago                             #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# ---------- POST ---------                                                                                  #
-# Parametros (POST JSON):                                                                                    # 
 # ---------- GET ----------                                                                                  #
 # Parametros: user_id, token                                                                                 #
 # Retorno: url                                                                                               #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @xframe_options_exempt
 @require_http_methods(["GET", "POST"])
-def userpayment_form_pagodigital(request):
+def userpayment_form_prisma_view(request):
     ########  Metodo POST  ########
     if request.method == 'POST':  
         data = request.POST
-        template = 'pagodigital/redirect.html'
+        template = 'prisma/redirect.html'
         
         # Verifico las key mandatorias
-        keys = [ 'name', 'phone', 'address', 'id_card', 'email', 'city', 
-                 'state', 'cc_number', 'cc_exp_month', 'cc_exp_year', 
-                 'cc_cvv', 'cc_fr_number', 'cc_fr_name', 'user_id' , 'token']
-                
+        keys = [ 'card_number', 'card_expiration_month', 'card_expiration_year', 'security_code',
+                 'card_holder_name', 'card_type', 'id_type', 'id_number', 'user_id', 'token']
+        print("###########################")
+        print(data)
         json_loader = __validate_json(data, keys)
         if json_loader['status'] == 'error':
             return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
         
+        # Obtengo el id de la tarjeta
+        payment_method_id = get_prisma_card_id(data['card_type'])
+        if payment_method_id is None:
+            message = 'invalid payment method ID'
+            body = { 'status': 'error', 'message': message }
+            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
+
         # Obtengo el usuario y el form vinculado al token
         user = User.get(data['user_id'])
         form = Form.get(user, data['token'])
@@ -214,65 +200,49 @@ def userpayment_form_pagodigital(request):
         up = form.user_payment
         
         # Obtengo settings del integrator
-        api_key = IntegratorSetting.get_var(form.integrator, 'api_key')
-        api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
+        public_apikey = IntegratorSetting.get_var(form.integrator, 'public_apikey')
+        private_apikey = IntegratorSetting.get_var(form.integrator, 'private_apikey')
         success_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_success')
         failed_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_failed')
-        jwt_endpoint = IntegratorSetting.get_var(form.integrator, 'jwt_endpoint')
-        jwt_user = IntegratorSetting.get_var(form.integrator, 'jwt_user')
-        jwt_pass = IntegratorSetting.get_var(form.integrator, 'jwt_pass')
+        endpoint = IntegratorSetting.get_var(form.integrator, 'endpoint')
 
-        # Obtengo el JWT
-        pd_jwt_gw = PagoDigitalJWTGateway(jwt_endpoint, jwt_user, jwt_pass)
+        prisma_gw = PrismaGateway(endpoint, public_apikey, private_apikey)
+
+        # Obtengo Token de pago
+        prisma_token = PrismaPaymentToken(data['card_number'], data['card_expiration_month'], data['card_expiration_year'],
+                                          data['security_code'], data['card_holder_name'], data['id_type'], data['id_number'])
+
         try:
-            ret, content = pd_jwt_gw.doPost()
+            ret, content = prisma_gw.get_payment_token(prisma_token.serialize()) # Revisar que devuelve
             if not ret:
-                message = "%s - %s" % (content['STATUS_MESSAGE'], content['MESSAGE'])
-                up.reply_error(message)
+                up.reply_error(json.dumps(content))
                 context = {'redirect_url': failed_url}
                 return render(request, template, context)
-            if not 'TOKEN' in content:
-                message = "JWT ERROR - TOKEN key not found"
-                up.reply_error(message)
-                context = {'redirect_url': failed_url}
-                return render(request, template, context)
-            pd_jwt = content['TOKEN']
+            payment_token = content['id']
         except Exception as e:
-            message = 'jwt error: %s' % e
+            message = {'status': 'error', 'message': 'get_payment_token(): %s' % e}
+            up.reply_error(json.dumps(message))
+            context = {'redirect_url': failed_url}
+            return render(request, template, context)
+
+
+        # Realizo primer pago para tokenizar tarjeta
+        payment_id = "PH_%s_card_%d" % (user.user_id, int(time()))
+        cc_bin = data['card_number'][:6]
+        add_card_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, 1, payment_method_id)
+        try:
+            ret, content = prisma_gw.add_card(add_card_tx.serialize())
+            if not ret:
+                up.reply_error(json.dumps(content))
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+            card_token = content['customer_token']
+        except Exception as e:
+            message = 'ADD CARD ERROR payment(): %s' % e
             up.reply_error(message)
             context = {'redirect_url': failed_url}
             return render(request, template, context)
 
-        # Realizar add card y obtener token
-        pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
-        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret, pd_jwt)
-        pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
-                                  data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
-                                  data['phone'], data['city'], data['state'])
-        try:
-            ret, content = pd_gw.doPost(pd_card.to_dict())
-            if not ret:
-                message = "%s - %s" % (content['STATUS_MESSAGE'], content['MESSAGE'])
-                up.reply_error(message)
-                context = {'redirect_url': failed_url}
-                return render(request, template, context)
-            if 'CODIGO_RESPUESTA' in content:
-                if str(content['CODIGO_RESPUESTA']) not in SUCCESS_CODES:
-                    message = "ADD CARD ERROR - code: %s - message: %s" % (content['CODIGO_RESPUESTA'], content['RESPUESTA'])
-                    up.reply_error(message)
-                    context = {'redirect_url': failed_url}
-                    return render(request, template, context)
-            else:
-                message = "ADD CARD ERROR - CODIGO_RESPUESTA not found"
-                up.reply_error(message)
-                context = {'redirect_url': failed_url}
-                return render(request, template, context)
-        except Exception as e:
-            message = 'add card error: %s' % e
-            up.reply_error(message)
-            context = {'redirect_url': failed_url}
-            return render(request, template, context)
-        
         # Habilito tarjeta en UP
         up.enabled_card = True
 
@@ -282,13 +252,20 @@ def userpayment_form_pagodigital(request):
             card.disable()
         
         # Creo la tarjeta o la obtengo si ya existe
-        card = Card.get_by_token(up.user, content['TOKEN'])
+        card = Card.get_by_token(up.user, card_token)
         if card is not None:
             card.enable()
         else:
-            card_exp = "%s/%s" % (data['cc_exp_month'], data['cc_exp_year'][-2:])
-            card = Card.create_with_token(user, content['TOKEN'], data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
+            card_exp = "%s/%s" % (data['card_expiration_month'], data['card_expiration_month'])
+            card = Card.create_with_token(user, card_token, data['card_number'][-4:], card_exp, data['card_type'], 
+                                          form.integrator, data['security_code'], data['card_number'][:6])
         
+        # Verifico si es un pago futuro
+        if up.payment_date > timezone.now().date(): # Verificar que pago no se a futuro
+            context = {'redirect_url': success_url}
+            return render(request, template, context)
+
+
         # Verifico si es trial y aplico descuento si corresponde
         if up.is_trial:
             trial_flag = True
@@ -310,26 +287,43 @@ def userpayment_form_pagodigital(request):
         ph = PaymentHistory.create(up, payment_id, form.integrator, card, disc_pct)
 
         if ph.amount > 0:
-            # Realizar pago
-            pd_tx_endpoint = IntegratorSetting.get_var(form.integrator, 'process_tx_endpoint')
-            pd_gw = PagoDigitalGateway(pd_tx_endpoint, api_key, api_secret, pd_jwt)
+            # Obtengo nuevo Token de pago
+            payment_data = {'token': card.token, 'security_code': card.cvv} 
             try:
-                pd_tx = PagoDigitalTx(int(ph.amount), card.token)
-                ret, content = pd_gw.doPost(pd_tx.to_dict())
-                print ret
-                print content
+                ret, content = prisma_gw.get_recurrence_token(payment_data) # Revisar que devuelve
+                if not ret:
+                    up.reply_error(json.dumps(content))
+                    context = {'redirect_url': failed_url}
+                    return render(request, template, context)
+                payment_token = content['id']
             except Exception as e:
-                message = 'Payment error: %s' % e
+                message = 'ERROR get_recurrence_token(): %s' % e
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
+
+
+            # Realizo pago
+            prisma_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, int(ph.amount*100), payment_method_id)
+            try:
+                ret, content = prisma_gw.payment(prisma_tx.serialize())
+                if not ret:
+                    up.reply_error(json.dumps(content))
+                    context = {'redirect_url': failed_url}
+                    return render(request, template, context)
+                card_token = content['customer_token']
+            except Exception as e:
+                message = 'ERROR payment(): %s' % e
                 up.reply_error(message)
                 ph.error('', message)
                 return False
         else:
             ret = True
-            content = {'CODIGO_RESPUESTA':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}
+            content = {'CODIGO_RESPUESTA':'-10', 'id':'-10', 'message': 'Pago con descuento del 100%'}            
      
         if ret:
-            # Obtengo los valores segun la respuesta de Pagodigital
-            pr = pagodigital_translator(content)
+            # Obtengo los valores segun la respuesta de Prisma
+            pr = prisma_translator(content) 
            
             # Seteo los valores de la UserPayment
             up.status  = pr["up_status"]
@@ -377,7 +371,7 @@ def userpayment_form_pagodigital(request):
             return render(request, template, context)
         
         else:
-            message = "could not create user payment"
+            message = json.dumps(content)
             up.reply_error(message)
             ph.error('', message)
 
@@ -408,9 +402,8 @@ def userpayment_form_pagodigital(request):
         
         context = {'country': user.country.code, 'email': user.email, 'baseurl': baseurl}
         return render(request, template, context)
-        
-            
-            
+
+
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                     Devuelve JSON con URL del formulario para agregar tarjeta                                 #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -418,11 +411,11 @@ def userpayment_form_pagodigital(request):
 # Retorno: url                                                                                               #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @require_http_methods(["POST"])
-def add_card_pagodigital(request):
+def add_card_prisma_view(request):
     # Vars
-    integrator = Integrator.get('pagodigital')
+    integrator = Integrator.get('prisma')
     baseurl    = Setting.get_var('baseurl')
-    template   = 'pagodigital/pagodigital.html'
+    template   = 'prisma/prisma.html'
 
     # Verifico ApiKey
     cap = __check_apikey(request)
@@ -446,7 +439,7 @@ def add_card_pagodigital(request):
 
     # Verifico si el usuario existe y sino devuelvo error
     try:
-        user       = User.objects.get(user_id=data['user_id'])
+        user = User.objects.get(user_id=data['user_id'])
     except ObjectDoesNotExist:
         message = 'user does not exist'
         body = { 'status': 'error', 'message': message }
@@ -467,105 +460,90 @@ def add_card_pagodigital(request):
         return HttpResponse(json.dumps(body), content_type="application/json", status=http_INTERNAL_ERROR)        
         
     iframe_params = { 'user_id': user.user_id, 'token': form.token }
-    iframe_url    = '%sapi/v1/pagodigital/addcard/form/?%s' % (baseurl, urlencode(iframe_params))
+    iframe_url    = '%sapi/v1/prisma/addcard/form/?%s' % (baseurl, urlencode(iframe_params))
     body = { 'status': 'success', 'value': { 'url': iframe_url } }
 
     return HttpResponse(json.dumps(body), content_type="application/json", status=http_POST_OK)
 
 
+
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #                                               Form para agregar tarjeta                                    #
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# ---------- POST ---------                                                                                  #
-# Parametros (POST JSON):                                                                                    # 
-# ---------- GET ----------                                                                                  #
-# Parametros: user_id, token                                                                                 #
-# Retorno: redirect on error or success                                                                      #
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 @require_http_methods(["POST"])
-def add_card_form_pagodigital(request):
-    ########  Metodo POST  ########
-    if request.method == 'POST':  
-        data     = request.POST
-        template = 'pagodigital/redirect.html'
-
-        # Verifico las key mandatorias
-        keys = [ 'name', 'phone', 'address', 'id_card', 'email', 'city', 
-                 'state', 'cc_number', 'cc_exp_month', 'cc_exp_year', 
-                 'cc_cvv', 'cc_fr_number', 'cc_fr_name', 'user_id' , 'token']
-                
-        json_loader = __validate_json(data, keys)
-        if json_loader['status'] == 'error':
-            return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
-        
-        # Obtengo el usuario y el form vinculado al token
-        user = User.get(data['user_id'])
-        form = Form.get(user, data['token'])
-        if form is None:
-            message = 'form not available'
-            body = { 'status': 'error', 'message': message }
-            return HttpResponse(json.dumps(body), content_type='application/json', status=http_BAD_REQUEST)
-
-        # Obtengo settings del integrator
-        api_key    = IntegratorSetting.get_var(form.integrator, 'api_key')
-        api_secret = IntegratorSetting.get_var(form.integrator, 'api_secret')
-        redirect_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_add_card')
-        jwt_endpoint = IntegratorSetting.get_var(form.integrator, 'jwt_endpoint')
-        jwt_user = IntegratorSetting.get_var(form.integrator, 'jwt_user')
-        jwt_pass = IntegratorSetting.get_var(form.integrator, 'jwt_pass')
-        
-        # Obtengo el JWT
-        pd_jwt_gw = PagoDigitalJWTGateway(jwt_endpoint, jwt_user, jwt_pass)
-        try:
-            ret, content = pd_jwt_gw.doPost()
-            if not ret:
-                context = {'redirect_url': redirect_url}
-                return render(request, template, context)
-            if not 'TOKEN' in content:
-                context = {'redirect_url': redirect_url}
-                return render(request, template, context)
-            pd_jwt = content['TOKEN']
-        except Exception as e:
-            context = {'redirect_url': redirect_url}
-            return render(request, template, context)
-
-        # Realizar add card y obtener token
-        pd_ac_endpoint = IntegratorSetting.get_var(form.integrator, 'add_card_endpoint')
-        pd_gw = PagoDigitalGateway(pd_ac_endpoint, api_key, api_secret, pd_jwt)
-        pd_card = PagoDigitalCard(data['cc_number'], data['cc_cvv'], data['cc_fr_number'], data['cc_exp_month'],
-                                  data['cc_exp_year'], data['name'], data['id_card'], data['address'], data['email'],
-                                  data['phone'], data['city'], data['state'])
-        try:
-            ret, content = pd_gw.doPost(pd_card.to_dict())
-            if not ret:
-                context = {'redirect_url': redirect_url}
-                return render(request, template, context)
-            if 'CODIGO_RESPUESTA' in content:
-                if str(content['CODIGO_RESPUESTA']) not in SUCCESS_CODES:
-                    context = {'redirect_url': redirect_url}
-                    return render(request, template, context)
-            else:
-                context = {'redirect_url': redirect_url}
-                return render(request, template, context)
-        except Exception as e:
-            context = {'redirect_url': redirect_url}
-            return render(request, template, context)
-        
-        # Deshabilito cualquier tarjeta existente
-        cards = Card.objects.filter(user=user, enabled=True)
-        for card in cards:
-            card.disable()
-        
-        # Creo la tarjeta o la obtengo si ya existe
-        card = Card.get_by_token(user, content['TOKEN'])
-        if card is not None:
-            card.enable()
-        else:
-            card_exp = "%s/%s" % (data['cc_exp_month'], data['cc_exp_year'][-2:])
-            card = Card.create_with_token(user, content['TOKEN'], data['cc_number'][-4:], card_exp, data['cc_fr_name'], form.integrator)
-
+def add_card_form_prisma(request):
+    data = request.POST
+    template = 'prisma/redirect.html'
+    
+    # Verifico las key mandatorias
+    keys = [ 'card_number', 'card_expiration_month', 'card_expiration_year', 
+             'security_code', 'card_holder_name', 'card_type', 'user_id', 'token']
+            
+    json_loader = __validate_json(data, keys)
+    if json_loader['status'] == 'error':
+        return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
+    
+    # Obtengo el id de la tarjeta
+    payment_method_id = get_prisma_card_id(data['card_type'])
+    if payment_method_id is None:
         context = {'redirect_url': redirect_url}
         return render(request, template, context)
 
+    # Obtengo el usuario y el form vinculado al token
+    user = User.get(data['user_id'])
+    form = Form.get(user, data['token'])
+    if form is None:
+        context = {'redirect_url': redirect_url}
+        return render(request, template, context)
+    
+    # Obtengo settings del integrator
+    public_apikey = IntegratorSetting.get_var(form.integrator, 'public_apikey')
+    private_apikey = IntegratorSetting.get_var(form.integrator, 'private_apikey')
+    success_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_success')
+    failed_url = IntegratorSetting.get_var(form.integrator, 'redirect_url_failed')
+    endpoint = IntegratorSetting.get_var(form.integrator, 'endpoint')
 
+    prisma_gw = PrismaGateway(endpoint, public_apikey, private_apikey)
 
+    # Obtengo Token de pago
+    try:
+        ret, content = prisma_gw.get_payment_token(data) # Revisar que devuelve
+        if not ret:
+            context = {'redirect_url': redirect_url}
+            return render(request, template, context)
+        payment_token = content['id']
+    except Exception as e:
+        context = {'redirect_url': redirect_url}
+        return render(request, template, context)
+
+    # Realizo pago para tokenizar tarjeta
+    payment_id = "PH_%s_card_%d" % (user.user_id, int(time()))
+    cc_bin = data['card_number'][:6]
+    add_card_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, 1, payment_method_id)
+    try:
+        ret, content = prisma_gw.payment(add_card_tx.serialize())
+        if not ret:
+            context = {'redirect_url': redirect_url}
+            return render(request, template, context)
+        card_token = content['customer_token']
+    except Exception as e:
+        context = {'redirect_url': redirect_url}
+        return render(request, template, context)
+
+    # Deshabilito cualquier tarjeta existente
+    cards = Card.objects.filter(user=user, enabled=True)
+    for card in cards:
+        card.disable()
+    
+    # Creo la tarjeta o la obtengo si ya existe
+    card = Card.get_by_token(user, card_token)
+    if card is not None:
+        card.enable()
+    else:
+        card_exp = "%s/%s" % (data['card_expiration_month'], data['card_expiration_month'])
+        card = Card.create_with_token(user, card_token, data['card_number'][-4:], card_exp, data['card_brand'], form.integrator, data['security_code'])
+
+    context = {'redirect_url': redirect_url}
+    return render(request, template, context)
+
+    
