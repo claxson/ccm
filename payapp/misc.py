@@ -275,6 +275,11 @@ def post_to_promiscuus(obj, event):
 
     if event == 'payment_commit':
         access_until = User.get_expiration(obj.user_payment.user.user_id)
+        if obj.card is not None:
+            card_type = obj.card.card_type
+        else:
+            card_type = ''
+
         try:
             ret = p.event_payment_commit(user_id=obj.user_payment.user.user_id,
                                         method_name=obj.integrator.name,
@@ -287,7 +292,11 @@ def post_to_promiscuus(obj, event):
                                         status=PH_STATUS[obj.status],
                                         message=obj.user_payment.message,
                                         trial=obj.trial,
-                                        trial_duration=obj.trial_duration)                                  
+                                        trial_duration=obj.trial_duration,
+                                        vat_amount=obj.vat_amount,
+                                        taxable_amount=obj.taxable_amount,
+                                        card_type=card_type,
+                                        user_payment_id=obj.user_payment.user_payment_id)                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -297,6 +306,11 @@ def post_to_promiscuus(obj, event):
             rebill_type = 'manual'
         else:
             rebill_type = 'auto'
+
+        if obj.card is not None:
+            card_type = obj.card.card_type
+        else:
+            card_type = ''
 
         access_until = User.get_expiration(obj.user_payment.user.user_id)
         try:
@@ -308,7 +322,14 @@ def post_to_promiscuus(obj, event):
                                 status=PH_STATUS[obj.status],
                                 message=obj.user_payment.message,
                                 trial=obj.trial,
-                                trial_duration=obj.trial_duration)                                  
+                                trial_duration=obj.trial_duration,
+                                vat_amount=obj.vat_amount,
+                                taxable_amount=obj.taxable_amount,
+                                card_type=card_type,
+                                user_payment_id=obj.user_payment.user_payment_id,
+                                duration=obj.user_payment.recurrence,
+                                method_name=obj.integrator.name)
+                                                                  
         except Exception as err:
             return {'status': 'error', 'message': err}
 
@@ -319,7 +340,8 @@ def post_to_promiscuus(obj, event):
         try:
             ret = p.event_cancel(user_id=obj.user.user_id,
                                 channel=CHANNEL[obj.channel],
-                                access_until=access_until)
+                                access_until=access_until,
+                                user_payment_id=obj.user_payment_id)
                                                                           
         except Exception as err:
             return {'status': 'error', 'message': err}

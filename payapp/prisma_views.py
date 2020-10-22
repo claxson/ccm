@@ -227,7 +227,7 @@ def userpayment_form_prisma_view(request):
 
 
         # Realizo primer pago para tokenizar tarjeta
-        payment_id = "PH_%s_card_%d" % (user.user_id, int(time()))
+        payment_id = "PH_%s_%dc" % (user.user_id, int(time()))
         cc_bin = data['card_number'][:6]
         add_card_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, 1, payment_method_id)
         try:
