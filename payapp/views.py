@@ -104,6 +104,14 @@ def __check_apikey(request):
     else:
         return {'status': 'error'}
 
+def __check_discount_apikey(request):
+    if 'HTTP_X_AUTH_CCM_KEY' in request.META:
+        if request.META['HTTP_X_AUTH_CCM_KEY'] == Setting.get_var('discount_apikey'):
+            return {'status': 'success'}
+        else:
+            return {'status': 'error'}
+    else:
+        return {'status': 'error'}
 
 def __get_card(user, token):
     try:
@@ -390,7 +398,8 @@ def create_payment(request):
 def payment_discount(request):
    # Verifico ApiKey
     cap = __check_apikey(request)
-    if cap['status'] == 'error':
+    dap = __check_discount_apikey(request)
+    if cap['status'] == 'error' and dap['status'] == 'error':
         return HttpResponse(status=http_UNAUTHORIZED)
     
     if request.method == 'POST':
