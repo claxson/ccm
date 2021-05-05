@@ -229,7 +229,8 @@ def userpayment_form_prisma_view(request):
         # Realizo primer pago para tokenizar tarjeta
         payment_id = "PH_%s_%dc" % (user.user_id, int(time()))
         cc_bin = data['card_number'][:6]
-        add_card_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, 1, payment_method_id)
+        add_card_amount = 10 * 100
+        add_card_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, add_card_amount, payment_method_id)
         try:
             ret, content = prisma_gw.add_card(add_card_tx.serialize())
             if not ret:
@@ -237,8 +238,13 @@ def userpayment_form_prisma_view(request):
                 context = {'redirect_url': failed_url}
                 return render(request, template, context)
             card_token = content['customer_token']
+            if card_token is None:
+                message = 'add card error - payment(): card token is null'
+                up.reply_error(message)
+                context = {'redirect_url': failed_url}
+                return render(request, template, context)
         except Exception as e:
-            message = 'ADD CARD ERROR payment(): %s' % e
+            message = 'add card error - payment(): %s' % e
             up.reply_error(message)
             context = {'redirect_url': failed_url}
             return render(request, template, context)
@@ -261,7 +267,7 @@ def userpayment_form_prisma_view(request):
                                           form.integrator, data['security_code'], data['card_number'][:6])
         
         # Verifico si es un pago futuro
-        if up.payment_date > timezone.now().date(): # Verificar que pago no se a futuro
+        if up.payment_date > timezone.now().date():
             context = {'redirect_url': success_url}
             return render(request, template, context)
 
@@ -304,7 +310,8 @@ def userpayment_form_prisma_view(request):
 
 
             # Realizo pago
-            prisma_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, int(ph.amount*100), payment_method_id)
+            final_amount = int(ph.amount*100) - add_card_amount
+            prisma_tx = PrismaTx(user.user_id, user.email, payment_id, payment_token, cc_bin, final_amount, payment_method_id)
             try:
                 ret, content = prisma_gw.payment(prisma_tx.serialize())
                 if not ret:

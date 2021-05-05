@@ -732,12 +732,16 @@ def user_status(request, user_id):
         up = UserPayment.get_last(user)
         if up is not None:
             ret['status_detail'] = up.status
+            if up.status != 'RE':
+                ret['status']  = 'E'
+                body = {'status': 'success', 'value': ret}
+                return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
         else:
             ret['status_detail'] = 'ER'
-        if not up.status == 'RE':
             ret['status']  = 'E'
             body = {'status': 'success', 'value': ret}
             return HttpResponse(json.dumps(body), content_type="application/json", status=http_REQUEST_OK)
+        
     
     ret['status']   = 'A'
     ret['message']  = ''
@@ -751,6 +755,7 @@ def user_status(request, user_id):
     ret['trial_amount']  = up.trial_amount
     ret['trial_counter'] = up.trial_counter
     ret['trial_recurrence'] = up.trial_recurrence
+    ret['subscription_date'] = user.get_subscription_date()
 
     integrator = up.get_integrator()
     if integrator is not None:

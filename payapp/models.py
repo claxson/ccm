@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 from django.db import models
+from django.db.models import Q
 from datetime import datetime, date
 from datetime import timedelta
 from django.utils import timezone
@@ -241,6 +242,15 @@ class User(models.Model):
         else:
             return False
 
+    def get_subscription_date(self):
+        up = UserPayment.objects.get(Q(user=self), Q(status='RE') | Q(status='AC'))
+        if up is None:
+            return None
+        phs = PaymentHistory.objects.filter(user_payment=up, status='A').order_by('creation_date')
+        if len(phs) == 0:
+            return None
+        return time.mktime(phs[0].creation_date.timetuple())
+        
 
 class UserPayment(models.Model):
     STATUS = (('PE', 'Pending'),
@@ -263,7 +273,7 @@ class UserPayment(models.Model):
     currency          = models.ForeignKey(Currency, blank=True, null=True)
     payment_date      = models.DateField(auto_now_add=False, blank=True, null=True, help_text='Next payment date')
     payday            = models.IntegerField(help_text='Payday number', blank=True, null=True)
-    recurrence        = models.IntegerField(help_text="Daily recurrence")
+    recurrence        = models.IntegerField(help_text="Recurrence interval")
     disc_pct          = models.IntegerField(default=0, help_text="Discount percentage")
     disc_counter      = models.IntegerField(default=0, help_text="Payments with discount remaining")
     status            = models.CharField(max_length=2, choices=STATUS, default='PE', help_text='Payment status')
@@ -273,6 +283,7 @@ class UserPayment(models.Model):
     trial_amount      = models.FloatField(default=0)
     trial_recurrence  = models.IntegerField(default=0)
     trial_counter     = models.IntegerField(default=0)
+    #external_id       = models.CharField(max_length=256, blank=True)
     internal          = models.BooleanField(default=True)
     enabled           = models.BooleanField(default=True)
     enabled_card      = models.BooleanField(default=False)
@@ -346,7 +357,14 @@ class UserPayment(models.Model):
             return cls.objects.get(user_payment_id=up_id)
         except ObjectDoesNotExist:
             return None
-    
+    """
+    @classmethod
+    def get_by_external_id(cls, external_id);
+        try:
+            return cls.objects.get(external_id=external_id)
+        except ObjectDoesNotExist:
+            return None
+    """
     @classmethod
     def get_active(cls, user):
         try:
@@ -360,7 +378,7 @@ class UserPayment(models.Model):
             return cls.objects.get(user=user, status='RE')
         except ObjectDoesNotExist:
             return None
-            
+
     @classmethod
     def get_enabled(cls, user):
         try:
@@ -371,6 +389,14 @@ class UserPayment(models.Model):
     @classmethod
     def get_last(cls, user):
         ups = cls.objects.filter(user=user).exclude(status='PE').order_by('-modification_date')
+        if len(ups) > 0:
+            return ups[0]
+        else:
+            return None
+
+    @classmethod
+    def get_last_canceled(cls, user):
+        ups = cls.objects.filter(user=user).exclude(status='CA').order_by('-modification_date')
         if len(ups) > 0:
             return ups[0]
         else:
@@ -388,6 +414,8 @@ class UserPayment(models.Model):
     def active(self):
         self.status  = 'AC'
         self.enabled = True
+        self.message = ''
+        self.channel = 'E'
         self.save()
     
     def enable(self):
@@ -454,7 +482,12 @@ class UserPayment(models.Model):
             return self.amount - (self.amount * float(self.disc_pct) / 100.0)
         else:
             return self.amount
-
+    """
+    def set_external_id(self, external_id):
+        self.external_id = external_id
+        self.save()
+        return self
+    """
     @staticmethod        
     def payday_calc(payment_date):
         day = payment_date.day

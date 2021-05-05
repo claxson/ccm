@@ -320,3 +320,6 @@ def callback_commercegate(request):
 
     print(xml)
     return HttpResponse('SUCCESS', content_type='text/plain', status='200')
+
+
+

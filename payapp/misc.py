@@ -857,15 +857,6 @@ def prisma_payment(up, card, logging, manual, amount):
         return False
 
 
-       
-
-
-
-
-
-
-
-
 def make_payment(up, card, logging=None, manual=False, amount=None):
     if card.integrator.name == 'paymentez':
         ret = paymentez_payment(up, card, logging, manual, amount)

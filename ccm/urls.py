@@ -1,18 +1,77 @@
 from django.conf.urls import url
 from django.contrib import admin
 
-from payapp.views import create_payment, payment_discount, cancel_payment, change_token_card, user_status, get_cards, get_enabled_card, change_user_email, refund, delete_card, payment_error
-from payapp.frontend_api import get_user, get_all_users, get_user_payment, get_all_payments, get_payment_history, get_all_payment_history, expireuser, activateuser, deleteuserpayment, getuserpayment, manual_payment, filter_countries, filter_status_recurrence, filter_status_history, filter_recurrence, filter_boolean
+# Paymentez and General Views
+from payapp.views import create_payment
+from payapp.views import payment_discount
+from payapp.views import cancel_payment
+from payapp.views import change_token_card
+from payapp.views import user_status
+from payapp.views import get_cards
+from payapp.views import get_enabled_card
+from payapp.views import change_user_email
+from payapp.views import refund
+from payapp.views import delete_card
+from payapp.views import payment_error
 
-from payapp.commercegate_views import payment_commercegate, cancel_commercegate, error_commercegate
+# Frontend API
+from payapp.frontend_api import get_user
+from payapp.frontend_api import get_all_users
+from payapp.frontend_api import get_user_payment
+from payapp.frontend_api import get_all_payments
+from payapp.frontend_api import get_payment_history
+from payapp.frontend_api import get_all_payment_history
+from payapp.frontend_api import expireuser
+from payapp.frontend_api import activateuser
+from payapp.frontend_api import deleteuserpayment
+from payapp.frontend_api import getuserpayment
+from payapp.frontend_api import manual_payment
+from payapp.frontend_api import filter_countries
+from payapp.frontend_api import filter_status_recurrence
+from payapp.frontend_api import filter_status_history
+from payapp.frontend_api import filter_recurrence
+from payapp.frontend_api import filter_boolean
 
-from payapp.frontend_views import login_view, logout_view, dashboard, users, userpayments, paymenthistory, commercegate
+# Frontend Views
+from payapp.frontend_views import login_view
+from payapp.frontend_views import logout_view
+from payapp.frontend_views import dashboard
+from payapp.frontend_views import users
+from payapp.frontend_views import userpayments
+from payapp.frontend_views import paymenthistory
+from payapp.frontend_views import commercegate
 
-from payapp.callback_views import callback_paymentez, callback_commercegate
+# CommerceGata
+from payapp.commercegate_views import payment_commercegate
+from payapp.commercegate_views import cancel_commercegate
+from payapp.commercegate_views import error_commercegate
 
-from payapp.pagodigital_views import payment_pagodigital, userpayment_form_pagodigital, add_card_pagodigital, add_card_form_pagodigital
+# Callbacks
+from payapp.callback_views import callback_paymentez
+from payapp.callback_views import callback_commercegate
+#from payapp.callback_views import callback_tatix
 
-from payapp.prisma_views import payment_prisma_view, userpayment_form_prisma_view, add_card_prisma_view, add_card_form_prisma
+# PagoDigital
+from payapp.pagodigital_views import payment_pagodigital
+from payapp.pagodigital_views import userpayment_form_pagodigital
+from payapp.pagodigital_views import add_card_pagodigital
+from payapp.pagodigital_views import add_card_form_pagodigital
+
+# Prisma
+from payapp.prisma_views import payment_prisma_view
+from payapp.prisma_views import userpayment_form_prisma_view
+from payapp.prisma_views import add_card_prisma_view
+from payapp.prisma_views import add_card_form_prisma
+
+# Tatix
+"""
+from payapp.tatix_views import form_tatix_view
+from payapp.tatix_views import payment_tatix_view
+from payapp.tatix_views import reactivate_userpayment_tatix_view
+from payapp.tatix_views import cancel_tatix_view
+from payapp.tatix_views import apply_discount_tatix_view
+from payapp.tatix_views import callback_tatix_view
+"""
 
 urlpatterns = [
 
@@ -47,6 +106,15 @@ urlpatterns = [
     url(r'^api/v1/prisma/set/addcard', add_card_prisma_view),
     url(r'^api/v1/prisma/addcard/form', add_card_form_prisma),
 
+    
+    # Tatix
+    #url(r'^api/v1/tatix/set/payment', payment_tatix_view),
+    #url(r'^api/v1/tatix/userpayment/form', form_tatix_view),
+    #url(r'^api/v1/tatix/userpayment/reactivate/(?P<user_id>[\w\-]+)', reactivate_userpayment_tatix_view),
+    #url(r'^api/v1/tatix/userpayment/cancel/(?P<user_id>[\w\-]+)', cancel_tatix_view),
+    #url(r'^api/v1/tatix/userpayment/discount', apply_discount_tatix_view),
+    #url(r'^api/v1/tatix/callback', callback_tatix),
+    
     url(r'^api/v1/api/users/(?P<user_id>[\w\-]+)', get_user),
     url(r'^api/v1/api/users', get_all_users),
     url(r'^api/v1/api/payments/(?P<user_id>[\w\-]+)/(?P<records>[\w\-]+)', get_user_payment),
