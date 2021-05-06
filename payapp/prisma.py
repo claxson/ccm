@@ -80,16 +80,16 @@ class PrismaGateway(object):
             jsonschema.validate(instance=data, schema=self.payment_token_schema)
         except jsonschema.exceptions.ValidationError as err:
             raise PrismaException(err.message)
-        print("------- get_payment_token --------")
-        print("URL: " + url )
-        print("DATA: " + json.dumps(data))
+        #print("------- get_payment_token --------")
+        #print("URL: " + url )
+        #print("DATA: " + json.dumps(data))
 
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
         except Exception as err:
             raise PrismaException(err.message)
 
-        print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
+        #print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
 
         try:
             content = json.loads(response.text)
@@ -112,16 +112,16 @@ class PrismaGateway(object):
         except jsonschema.exceptions.ValidationError as err:
             raise PrismaException(err.message)
 
-        print("------- get_recurrence_token --------")
-        print("URL: " + url )
-        print("DATA: " + json.dumps(data))
+        #print("------- get_recurrence_token --------")
+        #print("URL: " + url )
+        #print("DATA: " + json.dumps(data))
 
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
         except Exception as err:
             raise PrismaException(err.message)
 
-        print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
+        #print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
 
         try:
             content = json.loads(response.text)
@@ -144,16 +144,16 @@ class PrismaGateway(object):
         except jsonschema.exceptions.ValidationError as err:
             raise PrismaException(err.message)
 
-        print("------- payment --------")
-        print("URL: " + url )
-        print("DATA: " + json.dumps(data))
+        #print("------- payment --------")
+        #print("URL: " + url )
+        #print("DATA: " + json.dumps(data))
 
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
         except Exception as err:
             raise PrismaException(err.message)
 
-        print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
+        #print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
 
         try:
             content = json.loads(response.text)
@@ -175,16 +175,16 @@ class PrismaGateway(object):
         except jsonschema.exceptions.ValidationError as err:
             raise PrismaException(err.message)
 
-        print("------- add card --------")
-        print("URL: " + url )
-        print("DATA: " + json.dumps(data))
+        #print("------- add card --------")
+        #print("URL: " + url )
+        #print("DATA: " + json.dumps(data))
 
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
         except Exception as err:
             raise PrismaException(err.message)
 
-        print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
+        #print("RESPONSE: code: %d - content: %s" % (response.status_code, response.text))
 
         try:
             content = json.loads(response.text)

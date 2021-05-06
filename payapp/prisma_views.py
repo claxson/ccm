@@ -169,8 +169,6 @@ def userpayment_form_prisma_view(request):
         # Verifico las key mandatorias
         keys = [ 'card_number', 'card_expiration_month', 'card_expiration_year', 'security_code',
                  'card_holder_name', 'card_type', 'id_type', 'id_number', 'user_id', 'token']
-        print("###########################")
-        print(data)
         json_loader = __validate_json(data, keys)
         if json_loader['status'] == 'error':
             return HttpResponse(json.dumps(json_loader), content_type='application/json', status=http_BAD_REQUEST)
